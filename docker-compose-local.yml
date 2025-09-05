@@ -1,0 +1,103 @@
+services:
+  db:
+    image: postgres:15
+    container_name: nova811_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-nova811}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    networks:
+      - nova811_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: nova811_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - nova811_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./compose/local/backend/Dockerfile
+    container_name: nova811_backend
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./compose/local/backend/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.local
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - nova811_network
+
+  celeryworker:
+    build:
+      context: .
+      dockerfile: ./compose/local/backend/Dockerfile
+    container_name: nova811_celeryworker
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./compose/local/backend/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.local
+    command: celery -A core worker --loglevel=info
+    networks:
+      - nova811_network
+
+  celerybeat:
+    build:
+      context: .
+      dockerfile: ./compose/local/backend/Dockerfile
+    container_name: nova811_celerybeat
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./compose/local/backend/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.local
+    command: sh -c "rm -f ./celerybeat.pid && celery -A core beat --loglevel=info"
+    networks:
+      - nova811_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./compose/local/frontend/Dockerfile
+    container_name: nova811_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./compose/local/frontend/.env
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+    networks:
+      - nova811_network
+
+volumes:
+  postgres_data:
+
+networks:
+  nova811_network:
+    driver: bridge
