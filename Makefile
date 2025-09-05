@@ -83,6 +83,11 @@ makemigrations:
 	@echo "Creating Django migrations..."
 	docker exec -it nova811_backend python manage.py makemigrations
 
+# Run bash in backend container
+bash-backend:
+	@echo "Starting backend bash..."
+	docker exec -it nova811_backend bash
+
 # Run tests
 test:
 	@echo "Running pytest tests..."
