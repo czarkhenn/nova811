@@ -10,6 +10,14 @@ from django.conf.urls.static import static
 urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
+    
+    # Authentication URLs (Djoser)
+    path('api/auth/', include('djoser.urls')),
+    path('api/auth/', include('djoser.urls.jwt')),
+    
+    # App URLs
+    path('api/users/', include('users.urls')),
+    path('api/tickets/', include('tickets.urls')),
 ]
 
 # Serve media files in development
