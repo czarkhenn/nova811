@@ -1,5 +1,39 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from django.core.exceptions import ValidationError
+import re
+
+
+class UserManager(BaseUserManager):
+    """
+    Custom user manager for email-based authentication.
+    """
+
+    def create_user(self, email, password=None, **extra_fields):
+        """Create and return a regular user with email and password."""
+        if not email:
+            raise ValueError("The Email field must be set")
+        
+        email = self.normalize_email(email)
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
+        
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        """Create and return a superuser with email and password."""
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+            
+        return self.create_user(email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -11,6 +45,20 @@ class User(AbstractUser):
         ADMIN = "admin", "Admin"
         CONTRACTOR = "contractor", "Contractor"
 
+    # Override email field to make it unique
+    email = models.EmailField(
+        unique=True,
+        help_text="Email address for authentication"
+    )
+
+    # Make username optional and not required
+    username = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        help_text="Optional username field"
+    )
+
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
@@ -19,11 +67,26 @@ class User(AbstractUser):
     )
 
     phone_number = models.CharField(
-        max_length=20, blank=True, null=True, help_text="Phone number for SMS 2FA"
+        max_length=20, 
+        blank=True, 
+        null=True, 
+        help_text="Phone number for contact"
+    )
+
+    two_factor_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether two-factor authentication is enabled for this user"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Use email as the unique identifier for authentication
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']  # Required for createsuperuser
+
+    # Use custom manager
+    objects = UserManager()
 
     class Meta:
         db_table = "users_user"
@@ -33,7 +96,7 @@ class User(AbstractUser):
         ]
 
     def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
+        return f"{self.email} ({self.get_role_display()})"
 
     @property
     def is_admin(self):
@@ -46,84 +109,12 @@ class User(AbstractUser):
         return self.role == self.Role.CONTRACTOR
 
     def save(self, *args, **kwargs):
-        """Override save to set is_staff based on role."""
+        """
+        Override save to set is_staff based on role.
+        Business rule: Admin users should be staff.
+        """
         if self.role == self.Role.ADMIN:
             self.is_staff = True
         else:
             self.is_staff = False
         super().save(*args, **kwargs)
-
-
-class UserProfile(models.Model):
-    """
-    Extended user profile information.
-    """
-
-    class TwoFactorMethod(models.TextChoices):
-        EMAIL = "email", "Email"
-        SMS = "sms", "SMS"
-
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-
-    bio = models.TextField(blank=True, null=True)
-    avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
-
-    # 2FA related fields
-    two_factor_enabled = models.BooleanField(default=False)
-    two_factor_method = models.CharField(
-        max_length=10,
-        choices=TwoFactorMethod.choices,
-        default=TwoFactorMethod.EMAIL,
-        help_text="Preferred 2FA verification method",
-    )
-    backup_tokens = models.JSONField(default=list, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = "users_userprofile"
-        indexes = [
-            models.Index(fields=["two_factor_method"]),
-        ]
-
-    def __str__(self):
-        return f"Profile for {self.user.username}"
-
-
-class TwoFactorCode(models.Model):
-    """
-    Model to track 2FA verification codes.
-    """
-
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="two_factor_codes"
-    )
-
-    code = models.CharField(max_length=6)
-    is_used = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-
-    class Meta:
-        db_table = "users_twofactorcode"
-        indexes = [
-            models.Index(fields=["user", "code"]),
-            models.Index(fields=["expires_at"]),
-        ]
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"2FA Code for {self.user.username}"
-
-    @property
-    def is_expired(self):
-        """Check if the code has expired."""
-        from django.utils import timezone
-
-        return timezone.now() > self.expires_at
-
-    @property
-    def is_valid(self):
-        """Check if the code is valid (not used and not expired)."""
-        return not self.is_used and not self.is_expired

@@ -1,469 +1,358 @@
-from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+import logging
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User, UserProfile
-from .permissions import CanManageUsers, IsAdminUser
+from .services import PermissionService, TwoFactorService, LoginService
+from .selectors import UserSelector
 from .serializers import (
-    PasswordChangeSerializer,
-    TwoFactorMethodSerializer,
-    TwoFactorSetupSerializer,
-    TwoFactorStatusSerializer,
-    TwoFactorVerifySerializer,
-    UserDetailsSerializer,
-    UserProfileSerializer,
+    TwoFactorCodeInputSerializer,
+    SmartLoginInputSerializer,
+    SmartLoginVerifyInputSerializer,
+    UserStatsOutputSerializer,
+    TwoFactorSetupOutputSerializer,
+    TwoFactorStatusOutputSerializer,
+    TwoFactorVerifyOutputSerializer,
+    SmartLoginOutputSerializer,
+    SmartLoginVerifyOutputSerializer,
+    MessageOutputSerializer,
+    ErrorOutputSerializer,
+    UserSerializer,
 )
-from .services import (
-    PermissionService,
-    TwoFactorService,
-    UserProfileService,
-    UserService,
-)
 
-User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
-class UserListAPIView(APIView):
+class UserStatsApi(APIView):
     """
-    API view to list users (admin only) or get current user.
+    API for retrieving user statistics for admin dashboard.
+    
+    GET /api/users/stats/
     """
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """
-        Get list of users (admin) or current user info.
-        """
-        if PermissionService.is_admin(request.user):
-            users = User.objects.all().select_related("profile")
-            serializer = UserDetailsSerializer(users, many=True)
-            return Response(serializer.data)
-        else:
-            # Non-admin users get their own info
-            serializer = UserDetailsSerializer(request.user)
-            return Response(serializer.data)
-
-
-class UserDetailAPIView(APIView):
-    """
-    API view to get, update user details.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self, pk):
-        """
-        Get user object with permission check.
-        """
+        """Get user statistics for admin dashboard."""
         try:
-            user = User.objects.select_related("profile").get(pk=pk)
-
-            # Check permissions
-            if (
-                not PermissionService.is_admin(self.request.user)
-                and user != self.request.user
-            ):
-                return None
-
-            return user
-        except User.DoesNotExist:
-            return None
-
-    def get(self, request, pk):
-        """
-        Get user details.
-        """
-        user = self.get_object(pk)
-        if not user:
-            return Response(
-                {"error": "User not found or permission denied"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        serializer = UserDetailsSerializer(user)
-        return Response(serializer.data)
-
-    def patch(self, request, pk):
-        """
-        Update user details.
-        """
-        user = self.get_object(pk)
-        if not user:
-            return Response(
-                {"error": "User not found or permission denied"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        serializer = UserDetailsSerializer(user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class UserCreateAPIView(APIView):
-    """
-    API view to create new users (admin only).
-    """
-
-    permission_classes = [IsAuthenticated, CanManageUsers]
-
-    def post(self, request):
-        """
-        Create a new user.
-        """
-        email = request.data.get("email")
-        password = request.data.get("password")
-        first_name = request.data.get("first_name")
-        last_name = request.data.get("last_name")
-        role = request.data.get("role", User.Role.CONTRACTOR)
-        phone_number = request.data.get("phone_number")
-
-        if not all([email, password, first_name, last_name]):
-            return Response(
-                {"error": "Email, password, first_name, and last_name are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            user = UserService.create_user(
-                email=email,
-                password=password,
-                first_name=first_name,
-                last_name=last_name,
-                role=role,
-                phone_number=phone_number,
-            )
-            serializer = UserDetailsSerializer(user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except ValidationError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class UserRoleUpdateAPIView(APIView):
-    """
-    API view to update user role (admin only).
-    """
-
-    permission_classes = [IsAuthenticated, CanManageUsers]
-
-    def post(self, request, pk):
-        """
-        Change user role.
-        """
-        try:
-            user = User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        new_role = request.data.get("role")
-        if not new_role:
-            return Response(
-                {"error": "Role is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            updated_user = UserService.update_user_role(user, new_role)
-            serializer = UserDetailsSerializer(updated_user)
-            return Response(serializer.data)
-        except ValidationError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class UserActivateAPIView(APIView):
-    """
-    API view to activate user (admin only).
-    """
-
-    permission_classes = [IsAuthenticated, CanManageUsers]
-
-    def post(self, request, pk):
-        """
-        Activate user account.
-        """
-        try:
-            user = User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        activated_user = UserService.activate_user(user)
-        serializer = UserDetailsSerializer(activated_user)
-        return Response(serializer.data)
-
-
-class UserDeactivateAPIView(APIView):
-    """
-    API view to deactivate user (admin only).
-    """
-
-    permission_classes = [IsAuthenticated, CanManageUsers]
-
-    def post(self, request, pk):
-        """
-        Deactivate user account.
-        """
-        try:
-            user = User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            return Response(
-                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        deactivated_user = UserService.deactivate_user(user)
-        serializer = UserDetailsSerializer(deactivated_user)
-        return Response(serializer.data)
-
-
-class UserProfileAPIView(APIView):
-    """
-    API view for user profile management.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """
-        Get current user's profile.
-        """
-        profile = UserProfileService.get_or_create_profile(request.user)
-        serializer = UserProfileSerializer(profile)
-        return Response(serializer.data)
-
-    def patch(self, request):
-        """
-        Update current user's profile.
-        """
-        bio = request.data.get("bio")
-        avatar = request.FILES.get("avatar")
-
-        profile = UserProfileService.update_profile(
-            request.user, bio=bio, avatar=avatar
-        )
-        serializer = UserProfileSerializer(profile)
-        return Response(serializer.data)
-
-
-class TwoFactorSetupAPIView(APIView):
-    """
-    API view for 2FA setup.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """
-        Get current 2FA status with detailed information.
-        """
-        user = request.user
-        is_enabled = TwoFactorService.is_2fa_enabled(user)
-        method = TwoFactorService.get_2fa_method(user)
-        can_use_sms = TwoFactorService.can_use_sms(user)
-
-        data = {
-            "two_factor_enabled": is_enabled,
-            "two_factor_method": method,
-            "two_factor_method_display": "Email"
-            if method == UserProfile.TwoFactorMethod.EMAIL
-            else "SMS",
-            "can_use_sms": can_use_sms,
-            "phone_number_required": not bool(
-                user.phone_number and user.phone_number.strip()
-            ),
-        }
-
-        serializer = TwoFactorStatusSerializer(data)
-        return Response(serializer.data)
-
-    def post(self, request):
-        """
-        Enable or disable 2FA for the current user with method selection.
-        """
-        serializer = TwoFactorSetupSerializer(
-            data=request.data, context={"request": request}
-        )
-        if serializer.is_valid():
-            enable = serializer.validated_data["enable"]
-            method = serializer.validated_data.get(
-                "method", UserProfile.TwoFactorMethod.EMAIL
-            )
-
-            if enable:
-                success = TwoFactorService.enable_2fa(request.user, method)
-                message = f"2FA enabled successfully with {method} verification"
-            else:
-                success = TwoFactorService.disable_2fa(request.user)
-                message = "2FA disabled successfully"
-
-            if success:
-                return Response({"message": message})
-            else:
+            # Check permissions using service
+            if not PermissionService.can_view_user_stats(request.user):
+                logger.warning(f"User {request.user.id} attempted to access user stats without permission")
                 return Response(
-                    {"error": "Failed to update 2FA settings"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    ErrorOutputSerializer({"error": "Permission denied"}).data,
+                    status=status.HTTP_403_FORBIDDEN
                 )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TwoFactorMethodAPIView(APIView):
-    """
-    API view for changing 2FA method.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        """
-        Change user's 2FA method.
-        """
-        serializer = TwoFactorMethodSerializer(
-            data=request.data, context={"request": request}
-        )
-        if serializer.is_valid():
-            method = serializer.validated_data["method"]
-
-            try:
-                success = TwoFactorService.set_2fa_method(request.user, method)
-                if success:
-                    method_display = (
-                        "Email"
-                        if method == UserProfile.TwoFactorMethod.EMAIL
-                        else "SMS"
-                    )
-                    return Response(
-                        {
-                            "message": f"2FA method changed to {method_display}",
-                            "method": method,
-                        }
-                    )
-                else:
-                    return Response(
-                        {"error": "Failed to update 2FA method"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except ValidationError as e:
-                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TwoFactorRequestCodeAPIView(APIView):
-    """
-    API view to request a 2FA code.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        """
-        Generate and send a 2FA code to the user.
-        """
-        user = request.user
-
-        # Check if 2FA is enabled
-        if not TwoFactorService.is_2fa_enabled(user):
+            
+            stats = UserSelector.get_user_count_by_role()
+            logger.info(f"User stats retrieved by user {request.user.id}")
+            
+            serializer = UserStatsOutputSerializer(stats)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving user stats: {str(e)}")
             return Response(
-                {"error": "2FA is not enabled for this user"},
-                status=status.HTTP_400_BAD_REQUEST,
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        # Generate and send code
-        two_factor_code = TwoFactorService.create_2fa_code(user)
-        TwoFactorService.send_2fa_code(user, two_factor_code.code)
 
-        return Response(
-            {
-                "message": "Verification code sent successfully",
-                "expires_at": two_factor_code.expires_at,
-            }
-        )
-
-
-class TwoFactorVerifyAPIView(APIView):
+class TwoFactorSetupApi(APIView):
     """
-    API view to verify 2FA code.
+    API for getting 2FA setup data including QR code and instructions.
+    
+    GET /api/users/two-factor/setup/
     """
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        """Get 2FA setup data including QR code and instructions."""
+        try:
+            setup_data = TwoFactorService.get_setup_data(request.user)
+            logger.info(f"2FA setup data retrieved for user {request.user.id}")
+            
+            serializer = TwoFactorSetupOutputSerializer(setup_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            logger.warning(f"Validation error in 2FA setup for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": str(e)}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error in 2FA setup for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class TwoFactorEnableApi(APIView):
+    """
+    API for enabling 2FA for the authenticated user.
+    
+    POST /api/users/two-factor/enable/
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """
-        Verify the 2FA code.
-        """
-        serializer = TwoFactorVerifySerializer(data=request.data)
-        if serializer.is_valid():
-            code = serializer.validated_data["code"]
-            user = request.user
+        """Enable 2FA for the authenticated user."""
+        serializer = TwoFactorCodeInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                ErrorOutputSerializer({"error": "Invalid input data"}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-            # Verify the code
-            is_valid = TwoFactorService.verify_2fa_code(user, code)
+        verification_code = serializer.validated_data['code']
+        
+        # Verify the code first
+        if not TwoFactorService.verify_code(verification_code):
+            logger.warning(f"Invalid 2FA code attempt for user {request.user.id}")
+            return Response(
+                ErrorOutputSerializer({"error": "Invalid verification code"}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            TwoFactorService.enable_2fa(request.user)
+            logger.info(f"2FA enabled for user {request.user.id}")
+            
+            response_data = {"message": "Two-factor authentication enabled successfully"}
+            serializer = MessageOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            logger.warning(f"Validation error enabling 2FA for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": str(e)}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error enabling 2FA for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
+
+class TwoFactorDisableApi(APIView):
+    """
+    API for disabling 2FA for the authenticated user.
+    
+    POST /api/users/two-factor/disable/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Disable 2FA for the authenticated user."""
+        try:
+            TwoFactorService.disable_2fa(request.user)
+            logger.info(f"2FA disabled for user {request.user.id}")
+            
+            response_data = {"message": "Two-factor authentication disabled successfully"}
+            serializer = MessageOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            logger.warning(f"Validation error disabling 2FA for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": str(e)}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error disabling 2FA for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class TwoFactorVerifyApi(APIView):
+    """
+    API for verifying 2FA code for authenticated user.
+    
+    POST /api/users/two-factor/verify/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Verify 2FA code for authenticated user."""
+        serializer = TwoFactorCodeInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                ErrorOutputSerializer({"error": "Invalid input data"}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        verification_code = serializer.validated_data['code']
+        
+        try:
+            is_valid = TwoFactorService.verify_code(verification_code)
+            
             if is_valid:
-                return Response(
-                    {"message": "Code verified successfully", "verified": True}
-                )
+                logger.info(f"2FA code verified successfully for user {request.user.id}")
             else:
-                return Response(
-                    {"error": "Invalid or expired code", "verified": False},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                logger.warning(f"Invalid 2FA code attempt for user {request.user.id}")
+            
+            response_data = {
+                "valid": is_valid,
+                "message": "Code verified successfully" if is_valid else "Invalid verification code"
+            }
+            serializer = TwoFactorVerifyOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error verifying 2FA code for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-class PasswordChangeAPIView(APIView):
+class TwoFactorStatusApi(APIView):
     """
-    API view for password change.
+    API for getting 2FA status for the authenticated user.
+    
+    GET /api/users/two-factor/status/
     """
-
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        """
-        Change user password.
-        """
-        serializer = PasswordChangeSerializer(
-            data=request.data, context={"request": request}
-        )
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Password changed successfully"})
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class AdminStatsAPIView(APIView):
-    """
-    API view for admin statistics.
-    """
-
-    permission_classes = [IsAuthenticated, IsAdminUser]
-
     def get(self, request):
-        """
-        Get admin dashboard statistics.
-        """
-        total_users = User.objects.count()
-        admin_users = User.objects.filter(role=User.Role.ADMIN).count()
-        contractor_users = User.objects.filter(role=User.Role.CONTRACTOR).count()
-        active_users = User.objects.filter(is_active=True).count()
-        users_with_2fa = UserProfile.objects.filter(two_factor_enabled=True).count()
-
-        return Response(
-            {
-                "total_users": total_users,
-                "admin_users": admin_users,
-                "contractor_users": contractor_users,
-                "active_users": active_users,
-                "users_with_2fa": users_with_2fa,
+        """Get 2FA status for the authenticated user."""
+        try:
+            is_enabled = TwoFactorService.is_2fa_enabled(request.user)
+            
+            response_data = {
+                "enabled": is_enabled,
+                "message": "Two-factor authentication is enabled" if is_enabled else "Two-factor authentication is disabled"
             }
-        )
+            serializer = TwoFactorStatusOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting 2FA status for user {request.user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Internal server error"}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SmartLoginApi(APIView):
+    """
+    Smart login API that handles first step of 2FA login.
+    Returns user's 2FA requirement status instead of JWT tokens.
+    
+    POST /api/users/smart-login/
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        """Smart login endpoint that handles first step of 2FA login."""
+        serializer = SmartLoginInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                ErrorOutputSerializer({"error": "Email and password are required"}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+        
+        # Authenticate user
+        user = LoginService.authenticate_user(email, password)
+        if not user:
+            logger.warning(f"Failed login attempt for email: {email}")
+            return Response(
+                ErrorOutputSerializer({"error": "Invalid email or password"}).data,
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Create temporary session
+        try:
+            temp_session_id = LoginService.create_temporary_session(user)
+            masked_email = LoginService.mask_email(user.email)
+            
+            logger.info(f"Smart login initiated for user {user.id}")
+            
+            response_data = {
+                "requires_2fa": user.two_factor_enabled,
+                "temp_session_id": temp_session_id,
+                "delivery_method": "email",
+                "masked_email": masked_email,
+                "message": "Please complete 2FA verification" if user.two_factor_enabled else "Please verify or skip 2FA"
+            }
+            serializer = SmartLoginOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in smart login for user {user.id}: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Login failed. Please try again."}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SmartLoginVerifyApi(APIView):
+    """
+    Smart login verification API that handles 2FA verification with skip logic.
+    Issues JWT tokens after successful verification.
+    
+    POST /api/users/smart-login/verify/
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        """Smart login verification endpoint that handles 2FA verification with skip logic."""
+        serializer = SmartLoginVerifyInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                ErrorOutputSerializer({"error": "Temporary session ID is required"}).data,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        temp_session_id = serializer.validated_data['temp_session_id']
+        code = serializer.validated_data['code']
+        skip = serializer.validated_data['skip']
+        
+        # Verify 2FA and complete login
+        try:
+            user = LoginService.verify_2fa_and_login(temp_session_id, code, skip)
+            if not user:
+                logger.warning(f"Failed 2FA verification for session: {temp_session_id}")
+                return Response(
+                    ErrorOutputSerializer({"error": "Invalid verification code or session expired"}).data,
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access = refresh.access_token
+            
+            logger.info(f"Smart login completed successfully for user {user.id}")
+            
+            response_data = {
+                "access": str(access),
+                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role": user.role,
+                    "two_factor_enabled": user.two_factor_enabled,
+                },
+                "message": "Login successful"
+            }
+            serializer = SmartLoginVerifyOutputSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in smart login verification: {str(e)}")
+            return Response(
+                ErrorOutputSerializer({"error": "Verification failed. Please try again."}).data,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

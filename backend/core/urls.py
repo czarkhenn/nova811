@@ -11,7 +11,6 @@ urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
     
-    # Authentication URLs (Djoser)
     path('api/auth/', include('djoser.urls')),
     path('api/auth/', include('djoser.urls.jwt')),
     

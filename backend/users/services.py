@@ -1,396 +1,229 @@
+"""
+Business logic is encapsulated in services.
+"""
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.contrib.auth import authenticate
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+from datetime import timedelta
 import secrets
 import string
-from datetime import timedelta
 
-from django.conf import settings
-from django.contrib.auth import authenticate
-from django.core.exceptions import ValidationError
-from django.db import transaction
-from django.utils import timezone
-
-from .models import TwoFactorCode, User, UserProfile
-
-
-class UserService:
-    """
-    Service for user management operations.
-    """
-
-    @staticmethod
-    def create_user(
-        email: str,
-        password: str,
-        first_name: str,
-        last_name: str,
-        role: str = User.Role.CONTRACTOR,
-        phone_number: str = None,
-    ) -> User:
-        """
-        Create a new user with profile.
-        """
-        with transaction.atomic():
-            user = User.objects.create_user(
-                email=email,
-                username=email,
-                password=password,
-                first_name=first_name,
-                last_name=last_name,
-                role=role,
-                phone_number=phone_number or "",
-            )
-
-            # Create user profile
-            UserProfile.objects.create(user=user)
-
-            return user
-
-    @staticmethod
-    def update_user_role(user: User, role: str) -> User:
-        """
-        Update user role and related permissions.
-        """
-        if role not in [User.Role.ADMIN, User.Role.CONTRACTOR]:
-            raise ValidationError(f"Invalid role: {role}")
-
-        user.role = role
-        user.save()
-        return user
-
-    @staticmethod
-    def get_users_by_role(role: str):
-        """
-        Get all users with specific role.
-        """
-        return User.objects.filter(role=role).select_related("profile")
-
-    @staticmethod
-    def activate_user(user: User) -> User:
-        """
-        Activate a user account.
-        """
-        user.is_active = True
-        user.save()
-        return user
-
-    @staticmethod
-    def deactivate_user(user: User) -> User:
-        """
-        Deactivate a user account.
-        """
-        user.is_active = False
-        user.save()
-        return user
-
-
-class AuthenticationService:
-    """
-    Service for authentication operations.
-    """
-
-    @staticmethod
-    def authenticate_user(email: str, password: str) -> User:
-        """
-        Authenticate user with email and password.
-        """
-        user = authenticate(username=email, password=password)
-        if not user:
-            raise ValidationError("Invalid credentials")
-
-        if not user.is_active:
-            raise ValidationError("User account is disabled")
-
-        return user
-
-    @staticmethod
-    def check_login_attempts(email: str) -> bool:
-        """
-        Check if user has exceeded login attempts.
-        """
-
-        return True
-
-    @staticmethod
-    def reset_login_attempts(email: str):
-        """
-        Reset failed login attempts for user.
-        """
-        # TODO: Implement login attempt tracking
-        pass
-
-
-class TwoFactorService:
-    """
-    Service for 2FA operations supporting both email and SMS.
-    """
-
-    @staticmethod
-    def generate_2fa_code() -> str:
-        """
-        Generate a 6-digit 2FA code.
-        For local development, always return '123456'.
-        """
-        if settings.DEBUG:
-            return "123456"
-
-        return "".join(secrets.choice(string.digits) for _ in range(6))
-
-    @staticmethod
-    def create_2fa_code(user: User) -> TwoFactorCode:
-        """
-        Create a new 2FA code for user.
-        """
-        # Invalidate any existing unused codes
-        TwoFactorCode.objects.filter(user=user, is_used=False).update(is_used=True)
-
-        code = TwoFactorService.generate_2fa_code()
-        expires_at = timezone.now() + timedelta(minutes=10)
-
-        two_factor_code = TwoFactorCode.objects.create(
-            user=user, code=code, expires_at=expires_at
-        )
-
-        return two_factor_code
-
-    @staticmethod
-    def verify_2fa_code(user: User, code: str) -> bool:
-        """
-        Verify 2FA code for user.
-        """
-        try:
-            two_factor_code = TwoFactorCode.objects.get(
-                user=user, code=code, is_used=False
-            )
-
-            if two_factor_code.is_expired:
-                return False
-
-            # Mark code as used
-            two_factor_code.is_used = True
-            two_factor_code.save()
-
-            return True
-
-        except TwoFactorCode.DoesNotExist:
-            return False
-
-    @staticmethod
-    def enable_2fa(user: User, method: str = UserProfile.TwoFactorMethod.EMAIL) -> bool:
-        """
-        Enable 2FA for user with specified method.
-        """
-        profile, created = UserProfile.objects.get_or_create(user=user)
-        profile.two_factor_enabled = True
-        profile.two_factor_method = method
-        profile.save()
-        return True
-
-    @staticmethod
-    def disable_2fa(user: User) -> bool:
-        """
-        Disable 2FA for user.
-        """
-        try:
-            profile = user.profile
-            profile.two_factor_enabled = False
-            profile.save()
-
-            # Invalidate any existing codes
-            TwoFactorCode.objects.filter(user=user, is_used=False).update(is_used=True)
-
-            return True
-        except UserProfile.DoesNotExist:
-            return False
-
-    @staticmethod
-    def is_2fa_enabled(user: User) -> bool:
-        """
-        Check if 2FA is enabled for user.
-        """
-        try:
-            # Fetch profile directly from database to ensure we get the latest data
-            profile = UserProfile.objects.get(user=user)
-            return profile.two_factor_enabled
-        except UserProfile.DoesNotExist:
-            return False
-
-    @staticmethod
-    def get_2fa_method(user: User) -> str:
-        """
-        Get user's preferred 2FA method.
-        """
-        try:
-            return user.profile.two_factor_method
-        except UserProfile.DoesNotExist:
-            return UserProfile.TwoFactorMethod.EMAIL
-
-    @staticmethod
-    def set_2fa_method(user: User, method: str) -> bool:
-        """
-        Set user's preferred 2FA method.
-        """
-        if method not in [
-            UserProfile.TwoFactorMethod.EMAIL,
-            UserProfile.TwoFactorMethod.SMS,
-        ]:
-            raise ValidationError(f"Invalid 2FA method: {method}")
-
-        profile, created = UserProfile.objects.get_or_create(user=user)
-        profile.two_factor_method = method
-        profile.save()
-        return True
-
-    @staticmethod
-    def send_2fa_code(user: User, code: str, method: str = None):
-        """
-        Send 2FA code to user via their preferred method.
-        For local development, just print to console.
-        """
-        if method is None:
-            method = TwoFactorService.get_2fa_method(user)
-
-        if settings.DEBUG:
-            print(f"2FA Code for {user.email}: {code}")
-            return
-
-        # Send via appropriate method
-        if method == UserProfile.TwoFactorMethod.EMAIL:
-            TwoFactorService._send_email_code(user, code)
-        elif method == UserProfile.TwoFactorMethod.SMS:
-            TwoFactorService._send_sms_code(user, code)
-
-    @staticmethod
-    def _send_email_code(user: User, code: str):
-        """
-        Send 2FA code via email.
-        """
-        from django.core.mail import send_mail
-
-        subject = "Your 2FA Verification Code"
-        message = (
-            f"Your verification code is: {code}\n\nThis code will expire in 10 minutes."
-        )
-
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-
-    @staticmethod
-    def _send_sms_code(user: User, code: str):
-        """
-        Send 2FA code via SMS.
-        In production, integrate with SMS service like Twilio.
-        """
-        if not user.phone_number:
-            raise ValidationError("User has no phone number for SMS verification")
-
-        # For now, this is a placeholder
-        message = f"Your Nova811 verification code is: {code}. Valid for 10 minutes."
-
-        # Example integration with SMS service:
-        # sms_service.send_message(
-        #     to=user.phone_number,
-        #     message=message
-        # )
-
-        # For development, we already print to console in send_2fa_code
-        pass
-
-    @staticmethod
-    def can_use_sms(user: User) -> bool:
-        """
-        Check if user can use SMS 2FA (has phone number).
-        """
-        return bool(user.phone_number and user.phone_number.strip())
-
-
-class UserProfileService:
-    """
-    Service for user profile operations.
-    """
-
-    @staticmethod
-    def get_or_create_profile(user: User) -> UserProfile:
-        """
-        Get or create user profile.
-        """
-        profile, created = UserProfile.objects.get_or_create(user=user)
-        return profile
-
-    @staticmethod
-    def update_profile(user: User, bio: str = None, avatar=None) -> UserProfile:
-        """
-        Update user profile information.
-        """
-        profile = UserProfileService.get_or_create_profile(user)
-
-        if bio is not None:
-            profile.bio = bio
-
-        if avatar is not None:
-            profile.avatar = avatar
-
-        profile.save()
-        return profile
-
-    @staticmethod
-    def delete_avatar(user: User) -> UserProfile:
-        """
-        Delete user avatar.
-        """
-        profile = UserProfileService.get_or_create_profile(user)
-        if profile.avatar:
-            profile.avatar.delete()
-        profile.save()
-        return profile
+User = get_user_model()
 
 
 class PermissionService:
     """
-    Service for role-based permission checks.
+    Service for handling user permissions and authorization.
     """
-
+    
     @staticmethod
-    def is_admin(user: User) -> bool:
+    def can_view_user_stats(user):
         """
-        Check if user has admin role.
+        Check if user can view user statistics.
+        Only admin and manager roles can view stats.
         """
-        return user.is_authenticated and user.role == User.Role.ADMIN
+        return user.is_authenticated and user.role in ['admin', 'manager']
 
-    @staticmethod
-    def is_contractor(user: User) -> bool:
-        """
-        Check if user has contractor role.
-        """
-        return user.is_authenticated and user.role == User.Role.CONTRACTOR
 
+class TwoFactorService:
+    """
+    Service for handling Two-Factor Authentication operations.
+    """
+    
+    # Mock verification code for development
+    MOCK_VERIFICATION_CODE = "1234"
+    
     @staticmethod
-    def can_manage_users(user: User) -> bool:
+    def get_setup_data(user):
         """
-        Check if user can manage other users.
+        Get 2FA setup data including QR code and instructions.
+        For now, returns mock data for development.
         """
-        return PermissionService.is_admin(user)
+        if not user.is_authenticated:
+            raise ValidationError("User must be authenticated")
+        
+        # Mock setup data - in production, this would generate real TOTP secrets
+        return {
+            "qr_code": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+            "secret_key": "JBSWY3DPEHPK3PXP",  # Mock secret
+            "backup_codes": ["123456", "789012", "345678", "901234", "567890"],
+            "instructions": "Scan the QR code with your authenticator app, then enter the verification code to enable 2FA."
+        }
+    
+    @staticmethod
+    def enable_2fa(user):
+        """
+        Enable 2FA for the given user.
+        """
+        if not user.is_authenticated:
+            raise ValidationError("User must be authenticated")
+        
+        user.two_factor_enabled = True
+        user.save(update_fields=['two_factor_enabled'])
+        
+        return True
+    
+    @staticmethod
+    def disable_2fa(user):
+        """
+        Disable 2FA for the given user.
+        """
+        if not user.is_authenticated:
+            raise ValidationError("User must be authenticated")
+        
+        user.two_factor_enabled = False
+        user.save(update_fields=['two_factor_enabled'])
+        
+        return True
+    
+    @staticmethod
+    def verify_code(code):
+        """
+        Verify a 2FA code.
+        For development, accepts the mock code "1234".
+        In production, this would verify against TOTP.
+        """
+        if not code:
+            return False
+        
+        # Mock verification - accepts "1234" as valid
+        return code == TwoFactorService.MOCK_VERIFICATION_CODE
+    
+    @staticmethod
+    def is_2fa_enabled(user):
+        """
+        Check if 2FA is enabled for the given user.
+        """
+        if not user.is_authenticated:
+            return False
+        
+        return user.two_factor_enabled
 
-    @staticmethod
-    def can_access_admin_features(user: User) -> bool:
-        """
-        Check if user can access admin features.
-        """
-        return PermissionService.is_admin(user)
 
+class LoginService:
+    """
+    Service for handling smart login with conditional 2FA.
+    """
+    
     @staticmethod
-    def can_create_tickets(user: User) -> bool:
+    def authenticate_user(email, password):
         """
-        Check if user can create tickets.
+        Authenticate user with email and password.
+        Returns user object if valid, None otherwise.
         """
-        return user.is_authenticated  # Both roles can create tickets
-
+        try:
+            user = authenticate(username=email, password=password)
+            return user
+        except Exception:
+            return None
+    
     @staticmethod
-    def can_manage_tickets(user: User) -> bool:
+    def mask_email(email):
         """
-        Check if user can manage all tickets.
+        Mask email address for privacy.
+        Example: john.doe@gmail.com -> j***@gmail.com
         """
-        return PermissionService.is_admin(user)
+        if not email or '@' not in email:
+            return email
+        
+        local_part, domain = email.split('@', 1)
+        if len(local_part) <= 1:
+            masked_local = local_part
+        else:
+            masked_local = local_part[0] + '***'
+        
+        return f"{masked_local}@{domain}"
+    
+    @staticmethod
+    def create_temporary_session(user):
+        """
+        Create a temporary session for 2FA verification.
+        Returns a temporary session ID that expires in 5 minutes.
+        """
+        # Generate a secure random session ID
+        session_id = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        
+        # Store in Django session with expiration
+        from django.contrib.sessions.backends.db import SessionStore
+        session = SessionStore()
+        session['temp_user_id'] = user.id
+        session['temp_login_time'] = timezone.now().isoformat()
+        session.set_expiry(300)  # 5 minutes
+        session.save()
+        
+        return session.session_key
+    
+    @staticmethod
+    def get_user_from_temp_session(session_id):
+        """
+        Retrieve user from temporary session.
+        Returns user object if session is valid, None otherwise.
+        """
+        try:
+            from django.contrib.sessions.backends.db import SessionStore
+            session = SessionStore(session_key=session_id)
+            
+            temp_user_id = session.get('temp_user_id')
+            temp_login_time = session.get('temp_login_time')
+            
+            if not temp_user_id or not temp_login_time:
+                return None
+            
+            # Check if session has expired (5 minutes)
+            login_time = timezone.datetime.fromisoformat(temp_login_time.replace('Z', '+00:00'))
+            if timezone.now() - login_time > timedelta(minutes=5):
+                session.delete()
+                return None
+            
+            user = User.objects.get(id=temp_user_id)
+            return user
+            
+        except (User.DoesNotExist, Exception):
+            return None
+    
+    @staticmethod
+    def cleanup_temp_session(session_id):
+        """
+        Clean up temporary session after successful login.
+        """
+        try:
+            from django.contrib.sessions.backends.db import SessionStore
+            session = SessionStore(session_key=session_id)
+            session.delete()
+        except Exception:
+            pass  # Session might already be expired/deleted
+    
+    @staticmethod
+    def verify_2fa_and_login(session_id, code, skip=False):
+        """
+        Verify 2FA code and complete login process.
+        Returns user object if successful, None otherwise.
+        """
+        user = LoginService.get_user_from_temp_session(session_id)
+        if not user:
+            return None
+        
+        # Check if user has 2FA enabled
+        if user.two_factor_enabled:
+            # 2FA is required - skip is not allowed
+            if skip:
+                return None
+            
+            # Verify the code
+            if not TwoFactorService.verify_code(code):
+                return None
+        else:
+            # 2FA is not required - user can skip or provide code
+            if not skip and code:
+                # User provided code, verify it
+                if not TwoFactorService.verify_code(code):
+                    return None
+            # If skip=True or no code provided, allow login
+        
+        # Clean up temporary session
+        LoginService.cleanup_temp_session(session_id)
+        
+        return user
