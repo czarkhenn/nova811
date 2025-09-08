@@ -3,15 +3,11 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Install dependencies first (for better caching)
+# Copy package files
 COPY ./frontend/package*.json ./
-RUN npm install
-
-# Copy the rest of the application
-COPY ./frontend .
 
 # Expose port 3000
 EXPOSE 3000
 
-# Start the development server
-CMD ["npm", "run", "dev"]
+# Install dependencies and start the development server
+CMD ["sh", "-c", "npm install && npm run dev"]
