@@ -105,6 +105,11 @@ class UserCreateSerializer(BaseUserCreateSerializer):
         allow_blank=True,
         help_text="Phone number for contact",
     )
+    
+    re_password = serializers.CharField(
+        write_only=True,
+        help_text="Password confirmation"
+    )
 
     class Meta(BaseUserCreateSerializer.Meta):
         model = User
@@ -118,6 +123,16 @@ class UserCreateSerializer(BaseUserCreateSerializer):
             "role",
             "phone_number",
         )
+
+    def validate(self, attrs):
+        """Validate that passwords match."""
+        password = attrs.get('password')
+        re_password = attrs.get('re_password')
+        
+        if password != re_password:
+            raise serializers.ValidationError({"re_password": "Passwords do not match."})
+        
+        return attrs
 
     def validate_email(self, value):
         """Validate email uniqueness."""

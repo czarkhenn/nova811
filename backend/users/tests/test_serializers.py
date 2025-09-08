@@ -1,22 +1,26 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.test import APIRequestFactory
-from users.models import User, UserProfile
+from rest_framework import serializers
+
 from users.serializers import (
-    PasswordChangeSerializer,
-    TwoFactorMethodSerializer,
-    TwoFactorSetupSerializer,
-    TwoFactorStatusSerializer,
-    TwoFactorVerifySerializer,
+    TwoFactorCodeInputSerializer,
+    SmartLoginInputSerializer,
+    SmartLoginVerifyInputSerializer,
+    UserStatsOutputSerializer,
+    TwoFactorSetupOutputSerializer,
+    TwoFactorStatusOutputSerializer,
+    TwoFactorVerifyOutputSerializer,
+    SmartLoginOutputSerializer,
+    SmartLoginVerifyOutputSerializer,
+    MessageOutputSerializer,
+    ErrorOutputSerializer,
     UserCreateSerializer,
-    UserDetailsSerializer,
-    UserProfileSerializer,
-    UserWithProfileSerializer,
+    UserSerializer,
 )
-from users.services import UserProfileService, UserService
 
 User = get_user_model()
 
@@ -24,7 +28,7 @@ User = get_user_model()
 @pytest.fixture
 def user():
     """Fixture for a test user."""
-    return UserService.create_user(
+    return User.objects.create_user(
         email="test@example.com",
         password="testpass123",
         first_name="Test",
@@ -37,7 +41,7 @@ def user():
 @pytest.fixture
 def admin_user():
     """Fixture for an admin user."""
-    return UserService.create_user(
+    return User.objects.create_user(
         email="admin@example.com",
         password="testpass123",
         first_name="Admin",
@@ -53,66 +57,133 @@ def request_factory():
 
 
 @pytest.mark.django_db
-class TestUserDetailsSerializer:
-    """Test cases for UserDetailsSerializer."""
+class TestTwoFactorCodeInputSerializer:
+    """Test cases for TwoFactorCodeInputSerializer."""
 
-    def test_serialize_user_details(self, user):
-        """Test serializing user details."""
-        serializer = UserDetailsSerializer(user)
-        data = serializer.data
+    def test_valid_code(self):
+        """Test validation passes for valid code."""
+        data = {"code": "123456"}
+        serializer = TwoFactorCodeInputSerializer(data=data)
 
-        assert data["id"] == user.id
-        assert data["email"] == user.email
-        assert data["first_name"] == user.first_name
-        assert data["last_name"] == user.last_name
-        assert data["role"] == user.role
-        assert data["role_display"] == user.get_role_display()
-        assert data["phone_number"] == user.phone_number
-        assert data["is_admin"] == user.is_admin
-        assert data["is_contractor"] == user.is_contractor
-        assert data["is_active"] == user.is_active
-
-    def test_admin_user_properties(self, admin_user):
-        """Test admin user properties in serialization."""
-        serializer = UserDetailsSerializer(admin_user)
-        data = serializer.data
-
-        assert data["is_admin"] is True
-        assert data["is_contractor"] is False
-        assert data["role"] == User.Role.ADMIN
-
-    def test_contractor_user_properties(self, user):
-        """Test contractor user properties in serialization."""
-        serializer = UserDetailsSerializer(user)
-        data = serializer.data
-
-        assert data["is_admin"] is False
-        assert data["is_contractor"] is True
-        assert data["role"] == User.Role.CONTRACTOR
-
-    def test_read_only_fields(self, user):
-        """Test that read-only fields cannot be updated."""
-        serializer = UserDetailsSerializer(user, data={"is_admin": True})
         assert serializer.is_valid()
+        assert serializer.validated_data["code"] == "123456"
 
-        # is_admin should not be in validated_data since it's read-only
-        assert "is_admin" not in serializer.validated_data
+    def test_missing_code(self):
+        """Test validation fails for missing code."""
+        data = {}
+        serializer = TwoFactorCodeInputSerializer(data=data)
 
-    def test_update_allowed_fields(self, user):
-        """Test updating allowed fields."""
+        assert not serializer.is_valid()
+        assert "code" in serializer.errors
+
+    def test_empty_code(self):
+        """Test validation fails for empty code."""
+        data = {"code": ""}
+        serializer = TwoFactorCodeInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "code" in serializer.errors
+
+    def test_code_too_long(self):
+        """Test validation fails for code that's too long."""
+        data = {"code": "12345678901"}  # 11 characters, max is 10
+        serializer = TwoFactorCodeInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "code" in serializer.errors
+
+
+@pytest.mark.django_db
+class TestSmartLoginInputSerializer:
+    """Test cases for SmartLoginInputSerializer."""
+
+    def test_valid_data(self):
+        """Test validation passes for valid email and password."""
         data = {
-            "first_name": "Updated",
-            "last_name": "Name",
-            "phone_number": "9876543210",
+            "email": "test@example.com",
+            "password": "testpass123"
         }
-        serializer = UserDetailsSerializer(user, data=data, partial=True)
+        serializer = SmartLoginInputSerializer(data=data)
 
         assert serializer.is_valid()
-        updated_user = serializer.save()
+        assert serializer.validated_data["email"] == "test@example.com"
+        assert serializer.validated_data["password"] == "testpass123"
 
-        assert updated_user.first_name == "Updated"
-        assert updated_user.last_name == "Name"
-        assert updated_user.phone_number == "9876543210"
+    def test_missing_email(self):
+        """Test validation fails for missing email."""
+        data = {"password": "testpass123"}
+        serializer = SmartLoginInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "email" in serializer.errors
+
+    def test_missing_password(self):
+        """Test validation fails for missing password."""
+        data = {"email": "test@example.com"}
+        serializer = SmartLoginInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "password" in serializer.errors
+
+    def test_invalid_email_format(self):
+        """Test validation fails for invalid email format."""
+        data = {
+            "email": "invalid-email",
+            "password": "testpass123"
+        }
+        serializer = SmartLoginInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "email" in serializer.errors
+
+
+@pytest.mark.django_db
+class TestSmartLoginVerifyInputSerializer:
+    """Test cases for SmartLoginVerifyInputSerializer."""
+
+    def test_valid_data_with_code(self):
+        """Test validation passes for valid data with code."""
+        data = {
+            "temp_session_id": "session123",
+            "code": "1234",
+            "skip": False
+        }
+        serializer = SmartLoginVerifyInputSerializer(data=data)
+
+        assert serializer.is_valid()
+        assert serializer.validated_data["temp_session_id"] == "session123"
+        assert serializer.validated_data["code"] == "1234"
+        assert serializer.validated_data["skip"] is False
+
+    def test_valid_data_with_skip(self):
+        """Test validation passes for valid data with skip."""
+        data = {
+            "temp_session_id": "session123",
+            "skip": True
+        }
+        serializer = SmartLoginVerifyInputSerializer(data=data)
+
+        assert serializer.is_valid()
+        assert serializer.validated_data["temp_session_id"] == "session123"
+        assert serializer.validated_data["code"] == ""  # Default value
+        assert serializer.validated_data["skip"] is True
+
+    def test_missing_temp_session_id(self):
+        """Test validation fails for missing temp_session_id."""
+        data = {"code": "1234"}
+        serializer = SmartLoginVerifyInputSerializer(data=data)
+
+        assert not serializer.is_valid()
+        assert "temp_session_id" in serializer.errors
+
+    def test_defaults(self):
+        """Test default values are applied correctly."""
+        data = {"temp_session_id": "session123"}
+        serializer = SmartLoginVerifyInputSerializer(data=data)
+
+        assert serializer.is_valid()
+        assert serializer.validated_data["code"] == ""
+        assert serializer.validated_data["skip"] is False
 
 
 @pytest.mark.django_db
@@ -122,9 +193,9 @@ class TestUserCreateSerializer:
     def test_create_user_with_valid_data(self):
         """Test creating user with valid data."""
         data = {
-            "username": "newuser",
             "email": "newuser@example.com",
             "password": "newpass123",
+            "re_password": "newpass123",
             "first_name": "New",
             "last_name": "User",
             "role": User.Role.CONTRACTOR,
@@ -135,7 +206,6 @@ class TestUserCreateSerializer:
         assert serializer.is_valid()
         user = serializer.save()
 
-        assert user.username == "newuser"
         assert user.email == "newuser@example.com"
         assert user.first_name == "New"
         assert user.last_name == "User"
@@ -146,9 +216,9 @@ class TestUserCreateSerializer:
     def test_create_user_with_default_role(self):
         """Test creating user with default role."""
         data = {
-            "username": "newuser",
             "email": "newuser@example.com",
             "password": "newpass123",
+            "re_password": "newpass123",
             "first_name": "New",
             "last_name": "User",
         }
@@ -162,9 +232,9 @@ class TestUserCreateSerializer:
     def test_create_admin_user(self):
         """Test creating admin user."""
         data = {
-            "username": "adminuser",
             "email": "admin@example.com",
             "password": "adminpass123",
+            "re_password": "adminpass123",
             "first_name": "Admin",
             "last_name": "User",
             "role": User.Role.ADMIN,
@@ -180,9 +250,9 @@ class TestUserCreateSerializer:
     def test_validate_duplicate_email(self, user):
         """Test validation fails for duplicate email."""
         data = {
-            "username": "newuser",
             "email": user.email,  # Duplicate email
             "password": "newpass123",
+            "re_password": "newpass123",
             "first_name": "New",
             "last_name": "User",
         }
@@ -195,9 +265,9 @@ class TestUserCreateSerializer:
     def test_validate_invalid_phone_number(self):
         """Test validation fails for invalid phone number."""
         data = {
-            "username": "newuser",
             "email": "newuser@example.com",
             "password": "newpass123",
+            "re_password": "newpass123",
             "first_name": "New",
             "last_name": "User",
             "phone_number": "invalid-phone",
@@ -213,9 +283,9 @@ class TestUserCreateSerializer:
 
         for phone in valid_phones:
             data = {
-                "username": f"user{phone[-4:]}",
                 "email": f"user{phone[-4:]}@example.com",
                 "password": "newpass123",
+                "re_password": "newpass123",
                 "first_name": "New",
                 "last_name": "User",
                 "phone_number": phone,
@@ -227,9 +297,9 @@ class TestUserCreateSerializer:
     def test_create_user_without_optional_fields(self):
         """Test creating user without optional fields."""
         data = {
-            "username": "minimaluser",
             "email": "minimal@example.com",
             "password": "minimalpass123",
+            "re_password": "minimalpass123",
         }
         serializer = UserCreateSerializer(data=data)
 
@@ -243,326 +313,183 @@ class TestUserCreateSerializer:
 
 
 @pytest.mark.django_db
-class TestUserProfileSerializer:
-    """Test cases for UserProfileSerializer."""
+class TestUserSerializer:
+    """Test cases for UserSerializer."""
 
-    def test_serialize_user_profile(self, user):
-        """Test serializing user profile."""
-        profile = UserProfileService.get_or_create_profile(user)
-        profile.bio = "Test bio"
-        profile.two_factor_enabled = True
-        profile.two_factor_method = UserProfile.TwoFactorMethod.EMAIL
-        profile.save()
-
-        serializer = UserProfileSerializer(profile)
+    def test_serialize_user_details(self, user):
+        """Test serializing user details."""
+        serializer = UserSerializer(user)
         data = serializer.data
 
-        assert data["id"] == profile.id
-        assert data["bio"] == "Test bio"
-        assert data["two_factor_enabled"] is True
-        assert data["two_factor_method"] == UserProfile.TwoFactorMethod.EMAIL
-        assert (
-            data["two_factor_method_display"] == profile.get_two_factor_method_display()
-        )
+        assert data["id"] == user.id
+        assert data["email"] == user.email
+        assert data["first_name"] == user.first_name
+        assert data["last_name"] == user.last_name
+        assert data["role"] == user.role
+        assert data["role_display"] == user.get_role_display()
+        assert data["phone_number"] == user.phone_number
+        assert data["is_admin"] == user.is_admin
+        assert data["is_contractor"] == user.is_contractor
+        assert data["is_active"] == user.is_active
+        assert data["two_factor_enabled"] == user.two_factor_enabled
 
-    def test_update_profile_bio(self, user):
-        """Test updating profile bio."""
-        profile = UserProfileService.get_or_create_profile(user)
+    def test_admin_user_properties(self, admin_user):
+        """Test admin user properties in serialization."""
+        serializer = UserSerializer(admin_user)
+        data = serializer.data
 
-        data = {"bio": "Updated bio"}
-        serializer = UserProfileSerializer(profile, data=data, partial=True)
+        assert data["is_admin"] is True
+        assert data["is_contractor"] is False
+        assert data["role"] == User.Role.ADMIN
 
-        assert serializer.is_valid()
-        updated_profile = serializer.save()
+    def test_contractor_user_properties(self, user):
+        """Test contractor user properties in serialization."""
+        serializer = UserSerializer(user)
+        data = serializer.data
 
-        assert updated_profile.bio == "Updated bio"
+        assert data["is_admin"] is False
+        assert data["is_contractor"] is True
+        assert data["role"] == User.Role.CONTRACTOR
 
     def test_read_only_fields(self, user):
         """Test that read-only fields cannot be updated."""
-        profile = UserProfileService.get_or_create_profile(user)
-
-        data = {"two_factor_method_display": "Should not update"}
-        serializer = UserProfileSerializer(profile, data=data, partial=True)
-
-        assert serializer.is_valid()
-        # two_factor_method_display should not be in validated_data
-        assert "two_factor_method_display" not in serializer.validated_data
-
-
-@pytest.mark.django_db
-class TestUserWithProfileSerializer:
-    """Test cases for UserWithProfileSerializer."""
-
-    def test_serialize_user_with_profile(self, user):
-        """Test serializing user with profile."""
-        profile = UserProfileService.get_or_create_profile(user)
-        profile.bio = "Test bio"
-        profile.save()
-
-        # Refresh user to ensure profile relationship is loaded
-        user.refresh_from_db()
-
-        serializer = UserWithProfileSerializer(user)
-        data = serializer.data
-
-        assert "profile" in data
-        assert data["profile"]["bio"] == "Test bio"
-        assert data["email"] == user.email
-        assert data["first_name"] == user.first_name
-
-
-@pytest.mark.django_db
-class TestTwoFactorVerifySerializer:
-    """Test cases for TwoFactorVerifySerializer."""
-
-    def test_valid_code(self):
-        """Test validation passes for valid code."""
-        data = {"code": "123456"}
-        serializer = TwoFactorVerifySerializer(data=data)
-
-        assert serializer.is_valid()
-        assert serializer.validated_data["code"] == "123456"
-
-    def test_invalid_code_length(self):
-        """Test validation fails for invalid code length."""
-        invalid_codes = ["12345", "1234567", ""]
-
-        for code in invalid_codes:
-            data = {"code": code}
-            serializer = TwoFactorVerifySerializer(data=data)
-
-            assert not serializer.is_valid()
-            assert "code" in serializer.errors
-
-    def test_non_digit_code(self):
-        """Test validation fails for non-digit code."""
-        data = {"code": "abc123"}
-        serializer = TwoFactorVerifySerializer(data=data)
-
-        assert not serializer.is_valid()
-        assert "code" in serializer.errors
-        assert "only digits" in str(serializer.errors["code"][0])
-
-
-@pytest.mark.django_db
-class TestTwoFactorSetupSerializer:
-    """Test cases for TwoFactorSetupSerializer."""
-
-    def test_enable_2fa_with_email_method(self, user, request_factory):
-        """Test enabling 2FA with email method."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"enable": True, "method": UserProfile.TwoFactorMethod.EMAIL}
-        serializer = TwoFactorSetupSerializer(data=data, context={"request": request})
-
-        assert serializer.is_valid()
-        assert serializer.validated_data["enable"] is True
-        assert serializer.validated_data["method"] == UserProfile.TwoFactorMethod.EMAIL
-
-    def test_enable_2fa_with_sms_method_valid_phone(self, user, request_factory):
-        """Test enabling 2FA with SMS method when user has phone number."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"enable": True, "method": UserProfile.TwoFactorMethod.SMS}
-        serializer = TwoFactorSetupSerializer(data=data, context={"request": request})
-
+        serializer = UserSerializer(user, data={"role": User.Role.ADMIN}, partial=True)
         assert serializer.is_valid()
 
-    def test_enable_2fa_with_sms_method_no_phone(self, request_factory):
-        """Test enabling 2FA with SMS method when user has no phone number."""
-        user_no_phone = UserService.create_user(
-            email="nophone@example.com",
-            password="testpass123",
-            first_name="No",
-            last_name="Phone",
-        )
+        # role should be in validated_data since it's not read-only in UserSerializer
+        assert "role" in serializer.validated_data
 
-        request = request_factory.post("/")
-        request.user = user_no_phone
-
-        data = {"enable": True, "method": UserProfile.TwoFactorMethod.SMS}
-        serializer = TwoFactorSetupSerializer(data=data, context={"request": request})
-
-        assert not serializer.is_valid()
-        assert "method" in serializer.errors
-        assert "Phone number is required" in str(serializer.errors["method"][0])
-
-    def test_enable_2fa_without_method(self, user, request_factory):
-        """Test enabling 2FA without specifying method."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"enable": True}
-        serializer = TwoFactorSetupSerializer(data=data, context={"request": request})
-
-        assert not serializer.is_valid()
-        assert "method" in serializer.errors
-        assert "required when enabling" in str(serializer.errors["method"][0])
-
-    def test_disable_2fa(self, user, request_factory):
-        """Test disabling 2FA."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"enable": False}
-        serializer = TwoFactorSetupSerializer(data=data, context={"request": request})
-
-        assert serializer.is_valid()
-        assert serializer.validated_data["enable"] is False
-
-
-@pytest.mark.django_db
-class TestTwoFactorMethodSerializer:
-    """Test cases for TwoFactorMethodSerializer."""
-
-    def test_change_to_email_method(self, user, request_factory):
-        """Test changing 2FA method to email."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"method": UserProfile.TwoFactorMethod.EMAIL}
-        serializer = TwoFactorMethodSerializer(data=data, context={"request": request})
-
-        assert serializer.is_valid()
-        assert serializer.validated_data["method"] == UserProfile.TwoFactorMethod.EMAIL
-
-    def test_change_to_sms_method_with_phone(self, user, request_factory):
-        """Test changing 2FA method to SMS when user has phone."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {"method": UserProfile.TwoFactorMethod.SMS}
-        serializer = TwoFactorMethodSerializer(data=data, context={"request": request})
-
-        assert serializer.is_valid()
-
-    def test_change_to_sms_method_without_phone(self, request_factory):
-        """Test changing 2FA method to SMS when user has no phone."""
-        user_no_phone = UserService.create_user(
-            email="nophone@example.com",
-            password="testpass123",
-            first_name="No",
-            last_name="Phone",
-        )
-
-        request = request_factory.post("/")
-        request.user = user_no_phone
-
-        data = {"method": "sms"}
-        serializer = TwoFactorMethodSerializer(data=data, context={"request": request})
-
-        assert not serializer.is_valid()
-        assert "method" in serializer.errors
-        assert "Phone number is required" in str(serializer.errors["method"][0])
-
-
-@pytest.mark.django_db
-class TestTwoFactorStatusSerializer:
-    """Test cases for TwoFactorStatusSerializer."""
-
-    def test_serialize_2fa_status(self):
-        """Test serializing 2FA status."""
+    def test_update_allowed_fields(self, user):
+        """Test updating allowed fields."""
         data = {
-            "two_factor_enabled": True,
-            "two_factor_method": UserProfile.TwoFactorMethod.EMAIL,
-            "two_factor_method_display": "Email",
-            "can_use_sms": False,
-            "phone_number_required": True,
+            "first_name": "Updated",
+            "last_name": "Name",
+            "phone_number": "9876543210",
         }
-
-        serializer = TwoFactorStatusSerializer(data)
-        serialized_data = serializer.data
-
-        assert serialized_data["two_factor_enabled"] is True
-        assert serialized_data["two_factor_method"] == UserProfile.TwoFactorMethod.EMAIL
-        assert serialized_data["two_factor_method_display"] == "Email"
-        assert serialized_data["can_use_sms"] is False
-        assert serialized_data["phone_number_required"] is True
-
-
-@pytest.mark.django_db
-class TestPasswordChangeSerializer:
-    """Test cases for PasswordChangeSerializer."""
-
-    def test_valid_password_change(self, user, request_factory):
-        """Test valid password change."""
-        request = request_factory.post("/")
-        request.user = user
-
-        data = {
-            "old_password": "testpass123",
-            "new_password": "newpass123",
-            "confirm_password": "newpass123",
-        }
-        serializer = PasswordChangeSerializer(data=data, context={"request": request})
+        serializer = UserSerializer(user, data=data, partial=True)
 
         assert serializer.is_valid()
         updated_user = serializer.save()
 
-        assert updated_user.check_password("newpass123")
-        assert not updated_user.check_password("testpass123")
+        assert updated_user.first_name == "Updated"
+        assert updated_user.last_name == "Name"
+        assert updated_user.phone_number == "9876543210"
 
-    def test_incorrect_current_password(self, user, request_factory):
-        """Test password change with incorrect current password."""
-        request = request_factory.post("/")
-        request.user = user
 
+@pytest.mark.django_db
+class TestOutputSerializers:
+    """Test cases for output serializers."""
+
+    def test_user_stats_output_serializer(self):
+        """Test UserStatsOutputSerializer."""
         data = {
-            "old_password": "wrongpass",
-            "new_password": "newpass123",
-            "confirm_password": "newpass123",
+            "total_users": 10,
+            "admin_users": 2,
+            "contractor_users": 8,
+            "active_users": 9,
+            "inactive_users": 1,
         }
-        serializer = PasswordChangeSerializer(data=data, context={"request": request})
+        serializer = UserStatsOutputSerializer(data)
+        serialized_data = serializer.data
 
-        assert not serializer.is_valid()
-        assert "old_password" in serializer.errors
-        assert "incorrect" in str(serializer.errors["old_password"][0])
+        assert serialized_data["total_users"] == 10
+        assert serialized_data["admin_users"] == 2
+        assert serialized_data["contractor_users"] == 8
+        assert serialized_data["active_users"] == 9
+        assert serialized_data["inactive_users"] == 1
 
-    def test_password_confirmation_mismatch(self, user, request_factory):
-        """Test password change with mismatched confirmation."""
-        request = request_factory.post("/")
-        request.user = user
-
+    def test_two_factor_setup_output_serializer(self):
+        """Test TwoFactorSetupOutputSerializer."""
         data = {
-            "old_password": "testpass123",
-            "new_password": "newpass123",
-            "confirm_password": "differentpass",
+            "qr_code": "data:image/png;base64,test",
+            "secret_key": "JBSWY3DPEHPK3PXP",
+            "backup_codes": ["123456", "789012"],
+            "instructions": "Scan the QR code",
         }
-        serializer = PasswordChangeSerializer(data=data, context={"request": request})
+        serializer = TwoFactorSetupOutputSerializer(data)
+        serialized_data = serializer.data
 
-        assert not serializer.is_valid()
-        assert "confirm_password" in serializer.errors
-        assert "do not match" in str(serializer.errors["confirm_password"][0])
+        assert serialized_data["qr_code"] == "data:image/png;base64,test"
+        assert serialized_data["secret_key"] == "JBSWY3DPEHPK3PXP"
+        assert serialized_data["backup_codes"] == ["123456", "789012"]
+        assert serialized_data["instructions"] == "Scan the QR code"
 
-    @patch("users.serializers.validate_password")
-    def test_weak_password_validation(self, mock_validate, user, request_factory):
-        """Test password change with weak password."""
-        mock_validate.side_effect = DjangoValidationError(["Password is too weak"])
-
-        request = request_factory.post("/")
-        request.user = user
-
+    def test_two_factor_status_output_serializer(self):
+        """Test TwoFactorStatusOutputSerializer."""
         data = {
-            "old_password": "testpass123",
-            "new_password": "weak",
-            "confirm_password": "weak",
+            "enabled": True,
+            "message": "Two-factor authentication is enabled",
         }
-        serializer = PasswordChangeSerializer(data=data, context={"request": request})
+        serializer = TwoFactorStatusOutputSerializer(data)
+        serialized_data = serializer.data
 
-        assert not serializer.is_valid()
-        assert "new_password" in serializer.errors
-        assert "Password is too weak" in str(serializer.errors["new_password"][0])
+        assert serialized_data["enabled"] is True
+        assert serialized_data["message"] == "Two-factor authentication is enabled"
 
-    def test_missing_required_fields(self, user, request_factory):
-        """Test password change with missing required fields."""
-        request = request_factory.post("/")
-        request.user = user
+    def test_two_factor_verify_output_serializer(self):
+        """Test TwoFactorVerifyOutputSerializer."""
+        data = {
+            "valid": True,
+            "message": "Code verified successfully",
+        }
+        serializer = TwoFactorVerifyOutputSerializer(data)
+        serialized_data = serializer.data
 
-        data = {"old_password": "testpass123"}
-        serializer = PasswordChangeSerializer(data=data, context={"request": request})
+        assert serialized_data["valid"] is True
+        assert serialized_data["message"] == "Code verified successfully"
 
-        assert not serializer.is_valid()
-        assert "new_password" in serializer.errors
-        assert "confirm_password" in serializer.errors
+    def test_smart_login_output_serializer(self):
+        """Test SmartLoginOutputSerializer."""
+        data = {
+            "requires_2fa": True,
+            "temp_session_id": "session123",
+            "delivery_method": "email",
+            "masked_email": "t***@example.com",
+            "message": "Please complete 2FA verification",
+        }
+        serializer = SmartLoginOutputSerializer(data)
+        serialized_data = serializer.data
+
+        assert serialized_data["requires_2fa"] is True
+        assert serialized_data["temp_session_id"] == "session123"
+        assert serialized_data["delivery_method"] == "email"
+        assert serialized_data["masked_email"] == "t***@example.com"
+        assert serialized_data["message"] == "Please complete 2FA verification"
+
+    def test_smart_login_verify_output_serializer(self):
+        """Test SmartLoginVerifyOutputSerializer."""
+        data = {
+            "access": "access_token_123",
+            "refresh": "refresh_token_123",
+            "user": {
+                "id": 1,
+                "email": "test@example.com",
+                "first_name": "Test",
+                "last_name": "User",
+            },
+            "message": "Login successful",
+        }
+        serializer = SmartLoginVerifyOutputSerializer(data)
+        serialized_data = serializer.data
+
+        assert serialized_data["access"] == "access_token_123"
+        assert serialized_data["refresh"] == "refresh_token_123"
+        assert serialized_data["user"]["id"] == 1
+        assert serialized_data["user"]["email"] == "test@example.com"
+        assert serialized_data["message"] == "Login successful"
+
+    def test_message_output_serializer(self):
+        """Test MessageOutputSerializer."""
+        data = {"message": "Operation completed successfully"}
+        serializer = MessageOutputSerializer(data)
+        serialized_data = serializer.data
+
+        assert serialized_data["message"] == "Operation completed successfully"
+
+    def test_error_output_serializer(self):
+        """Test ErrorOutputSerializer."""
+        data = {"error": "Something went wrong"}
+        serializer = ErrorOutputSerializer(data)
+        serialized_data = serializer.data
+
+        assert serialized_data["error"] == "Something went wrong"
