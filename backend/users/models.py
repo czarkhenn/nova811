@@ -27,6 +27,7 @@ class UserManager(BaseUserManager):
         """Create and return a superuser with email and password."""
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("role", "admin")  # Default superusers to admin role
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
@@ -112,9 +113,12 @@ class User(AbstractUser):
         """
         Override save to set is_staff based on role.
         Business rule: Admin users should be staff.
+        Preserve superuser staff status regardless of role.
         """
-        if self.role == self.Role.ADMIN:
-            self.is_staff = True
-        else:
-            self.is_staff = False
+        # Only apply role-based staff logic to non-superusers
+        if not self.is_superuser:
+            if self.role == self.Role.ADMIN:
+                self.is_staff = True
+            else:
+                self.is_staff = False
         super().save(*args, **kwargs)
