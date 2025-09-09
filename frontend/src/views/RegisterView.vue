@@ -121,30 +121,6 @@
                   </div>
                 </div>
 
-                <div class="mb-3">
-                  <label for="role" class="form-label">Role</label>
-                  <div class="input-group">
-                    <span class="input-group-text">
-                      <i class="bi bi-shield-check"></i>
-                    </span>
-                    <select
-                      id="role"
-                      v-model="form.role"
-                      class="form-select"
-                      :class="{ 'is-invalid': errors.role }"
-                      required
-                    >
-                      <option value="contractor">Contractor</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <div v-if="errors.role" class="invalid-feedback">
-                      {{ errors.role }}
-                    </div>
-                  </div>
-                  <div class="form-text">
-                    Select your role. Contractors have standard access, while Admins have full system access.
-                  </div>
-                </div>
 
                 <div class="mb-3">
                   <label for="password" class="form-label">Password</label>
@@ -288,7 +264,6 @@ const form = reactive({
   username: '',
   email: '',
   phoneNumber: '',
-  role: 'contractor',
   password: '',
   confirmPassword: '',
   acceptTerms: false,
@@ -300,7 +275,6 @@ const errors = reactive({
   username: '',
   email: '',
   phoneNumber: '',
-  role: '',
   password: '',
   confirmPassword: '',
   acceptTerms: '',
@@ -398,7 +372,6 @@ const handleRegister = async () => {
       username: form.username.trim(),
       email: form.email.trim(),
       phoneNumber: form.phoneNumber.trim(),
-      role: form.role,
       password: form.password,
       confirmPassword: form.confirmPassword,
     })

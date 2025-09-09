@@ -198,7 +198,6 @@ class TestUserCreateSerializer:
             "re_password": "newpass123",
             "first_name": "New",
             "last_name": "User",
-            "role": User.Role.CONTRACTOR,
             "phone_number": "1234567890",
         }
         serializer = UserCreateSerializer(data=data)
@@ -209,7 +208,7 @@ class TestUserCreateSerializer:
         assert user.email == "newuser@example.com"
         assert user.first_name == "New"
         assert user.last_name == "User"
-        assert user.role == User.Role.CONTRACTOR
+        assert user.role == User.Role.CONTRACTOR  # Always contractor
         assert user.phone_number == "1234567890"
         assert user.check_password("newpass123")
 
@@ -229,23 +228,26 @@ class TestUserCreateSerializer:
 
         assert user.role == User.Role.CONTRACTOR
 
-    def test_create_admin_user(self):
-        """Test creating admin user."""
+    def test_role_field_not_accepted(self):
+        """Test that role field is not accepted in registration."""
         data = {
             "email": "admin@example.com",
             "password": "adminpass123",
             "re_password": "adminpass123",
             "first_name": "Admin",
             "last_name": "User",
-            "role": User.Role.ADMIN,
+            "role": User.Role.ADMIN,  # This should be ignored
         }
         serializer = UserCreateSerializer(data=data)
 
+        # Should still be valid, but role field should be ignored
         assert serializer.is_valid()
         user = serializer.save()
 
-        assert user.role == User.Role.ADMIN
-        assert user.is_admin is True
+        # User should always be contractor regardless of role field in data
+        assert user.role == User.Role.CONTRACTOR
+        assert user.is_contractor is True
+        assert user.is_admin is False
 
     def test_validate_duplicate_email(self, user):
         """Test validation fails for duplicate email."""

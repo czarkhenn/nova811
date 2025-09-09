@@ -91,14 +91,9 @@ class ErrorOutputSerializer(serializers.Serializer):
 class UserCreateSerializer(BaseUserCreateSerializer):
     """
     Custom user creation serializer for Djoser.
-    Handles role field with email-based authentication.
+    All new users are automatically assigned the contractor role.
     """
 
-    role = serializers.ChoiceField(
-        choices=User.Role.choices,
-        default=User.Role.CONTRACTOR,
-        help_text="User role for access control",
-    )
     phone_number = serializers.CharField(
         max_length=20,
         required=False,
@@ -120,7 +115,6 @@ class UserCreateSerializer(BaseUserCreateSerializer):
             "last_name",
             "password",
             "re_password",
-            "role",
             "phone_number",
         )
 
@@ -154,9 +148,9 @@ class UserCreateSerializer(BaseUserCreateSerializer):
     def create(self, validated_data):
         """
         Create user using custom manager with email-based authentication.
+        All new users are automatically assigned the contractor role.
         """
         # Extract custom fields
-        role = validated_data.pop('role', User.Role.CONTRACTOR)
         phone_number = validated_data.pop('phone_number', '')
         
         # Extract required fields for create_user
@@ -166,11 +160,11 @@ class UserCreateSerializer(BaseUserCreateSerializer):
         # Remove re_password as it's not needed for user creation
         validated_data.pop('re_password', None)
         
-        # Create user with email-based manager
+        # Create user with email-based manager - always use contractor role
         user = User.objects.create_user(
             email=email,
             password=password,
-            role=role,
+            role=User.Role.CONTRACTOR,
             phone_number=phone_number,
             **validated_data  # This includes first_name, last_name, etc.
         )

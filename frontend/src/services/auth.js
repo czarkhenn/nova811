@@ -72,7 +72,6 @@ export const authService = {
         first_name: userData.firstName,
         last_name: userData.lastName,
         phone_number: userData.phoneNumber || '',
-        role: userData.role,
       })
       
       return response.data
