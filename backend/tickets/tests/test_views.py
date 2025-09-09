@@ -447,7 +447,7 @@ class TestTicketAPI:
         """Test assigning non-existent ticket."""
         self.client.force_authenticate(user=self.admin_user)
         
-        url = reverse('tickets:ticket-assign', kwargs={'ticket_id': 99999})
+        url = reverse('tickets:ticket-assign', kwargs={'ticket_id': '00000000-0000-0000-0000-000000000000'})
         data = {'assigned_contractor_id': self.contractor2.id}
         
         response = self.client.post(url, data, format='json')
