@@ -118,6 +118,26 @@ make createsuperuser # Create Django superuser
 make collectstatic  # Collect static files
 ```
 
+#### Import Tickets Information
+The `make import-tickets` command loads comprehensive test data including:
+
+**Admin Users Created:**
+- `super1@admin.com` - Super Admin (2FA enabled)
+- `super2@admin.com` - Admin Manager (2FA disabled)
+
+**Test Contractor Users Created:**
+- `test1@user.com` through `test10@user.com` - 10 contractor accounts
+- Some with 2FA enabled, others disabled for testing different scenarios
+
+**Default Password:**
+All seeded users (both admin and contractors) use the same password: `dev123123`
+
+**Sample Tickets:**
+- 30 realistic tickets with various statuses (open, in_progress, closed, on_hold, cancelled)
+- Tickets assigned to different contractors
+- Mix of expiration dates including expired and expiring soon tickets
+- Realistic organizations and locations for testing
+
 ### Utilities
 ```bash
 make django-help    # Show available Django commands
@@ -163,7 +183,6 @@ make help          # Show all available make commands
 - **Frontend Testing** - Vue component tests with Vitest
 - **API Testing** - Automated API endpoint testing
 - **Code Quality** - ESLint and Prettier for frontend code formatting
-
 
 
 ## 🧪 Development Workflow
@@ -254,7 +273,8 @@ VITE_APP_NAME=Nova811 Ticketing Platform
 NODE_ENV=development
 ```
 
-
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**Nova811 Ticketing Platform** - Built with ❤️ for efficient work order management
