@@ -27,6 +27,12 @@
                 Dashboard
               </router-link>
             </li>
+            <li class="nav-item">
+              <router-link to="/tickets" class="nav-link" active-class="active">
+                <i class="bi bi-ticket-perforated me-1"></i>
+                Tickets
+              </router-link>
+            </li>
             <li v-if="authStore.isAdmin" class="nav-item">
               <router-link to="/users" class="nav-link" active-class="active">
                 <i class="bi bi-people me-1"></i>
