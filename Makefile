@@ -18,6 +18,8 @@ help:
 	@echo "  makemigrations - Create Django migrations"
 	@echo "  test           - Run pytest tests"
 	@echo "  clean          - Clean up Docker containers and volumes"
+	@echo "  import-tickets - Import test users and tickets"
+	@echo "  clear-tickets  - Clear all data from database"
 
 # Start all services
 start:
@@ -113,3 +115,13 @@ collectstatic:
 django-help:
 	@echo "Available Django management commands:"
 	docker exec -it nova811_backend python manage.py help
+
+# Import test data
+import-tickets:
+	@echo "Importing test users and tickets..."
+	docker exec -it nova811_backend python manage.py seed_test_data
+
+# Clear all data from database
+clear-tickets:
+	@echo "Clearing all data from database..."
+	docker exec -it nova811_backend python manage.py clear_data
