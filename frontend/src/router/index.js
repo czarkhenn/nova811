@@ -40,15 +40,21 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresVerification: true },
     },
     {
-      path: '/users',
-      name: 'users',
-      component: () => import('@/views/UsersView.vue'),
-      meta: { requiresAuth: true, requiresVerification: true, requiresAdmin: true },
-    },
-    {
       path: '/tickets',
       name: 'tickets',
       component: () => import('@/views/TicketsView.vue'),
+      meta: { requiresAuth: true, requiresVerification: true },
+    },
+    {
+      path: '/logs',
+      name: 'logs',
+      component: () => import('@/views/LogsView.vue'),
+      meta: { requiresAuth: true, requiresVerification: true },
+    },
+    {
+      path: '/expiring-tickets',
+      name: 'expiring-tickets',
+      component: () => import('@/views/ExpiringTicketsView.vue'),
       meta: { requiresAuth: true, requiresVerification: true },
     },
   ],

@@ -23,6 +23,13 @@
         </div>
       </div>
 
+      <!-- Expiring Tickets -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <ExpiringTicketsTable :max-display="5" />
+        </div>
+      </div>
+
       <!-- Ticket Statistics -->
       <div class="row mb-4">
         <div class="col-md-3 mb-3">
@@ -176,12 +183,6 @@
                     <span>Manage Tickets</span>
                   </router-link>
                 </div>
-                <div v-if="authStore.isAdmin" class="col-md-4 mb-3">
-                  <router-link to="/users" class="btn btn-outline-success w-100 h-100 d-flex flex-column align-items-center justify-content-center py-3">
-                    <i class="bi bi-people display-6 mb-2"></i>
-                    <span>Manage Users</span>
-                  </router-link>
-                </div>
               </div>
             </div>
           </div>
@@ -228,17 +229,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Ticket Detail Modal -->
+    <TicketDetailModal
+      v-if="ticketsStore.showDetailModal"
+      :show="ticketsStore.showDetailModal"
+      :ticket="ticketsStore.selectedTicket"
+      @close="ticketsStore.closeDetailModal"
+      @renew="handleTicketRenew"
+      @close-ticket="ticketsStore.closeTicket"
+      @assign="(ticket) => ticketsStore.openAssignModal(ticket, authStore.user?.role)"
+      @ticket-updated="handleTicketUpdated"
+    />
+
+    <!-- Assign Ticket Modal -->
+    <AssignTicketModal
+      v-if="ticketsStore.showAssignModal"
+      :show="ticketsStore.showAssignModal"
+      :ticket="ticketsStore.selectedTicket"
+      :contractors="ticketsStore.contractors"
+    />
   </AppLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { useTicketsStore } from '@/stores/tickets.js'
 import { useToast } from 'vue-toastification'
 import AppLayout from '@/components/AppLayout.vue'
+import ExpiringTicketsTable from '@/components/ExpiringTicketsTable.vue'
+import TicketDetailModal from '@/components/TicketDetailModal.vue'
+import AssignTicketModal from '@/components/AssignTicketModal.vue'
 import api from '@/services/api.js'
 
 const authStore = useAuthStore()
+const ticketsStore = useTicketsStore()
 const toast = useToast()
 
 // Reactive data
@@ -303,7 +329,12 @@ const getLogColor = (action) => {
 const loadTicketStats = async () => {
   try {
     const response = await api.get('/tickets/stats/')
-    ticketStats.value = response.data
+    const stats = response.data
+    // Calculate active tickets as open + in_progress
+    ticketStats.value = {
+      ...stats,
+      active: (stats.open || 0) + (stats.in_progress || 0)
+    }
   } catch (error) {
     console.error('Error loading ticket stats:', error)
   }
@@ -311,7 +342,7 @@ const loadTicketStats = async () => {
 
 const loadRecentLogs = async () => {
   try {
-    const response = await api.get('/logs/recent/', {
+    const response = await api.get('/tickets/logs/users/', {
       params: { limit: 10 }
     })
     recentLogs.value = response.data.results || response.data
@@ -334,6 +365,28 @@ const loadDashboardData = async () => {
   }
 }
 
+const handleTicketRenew = async (ticket, days = 15) => {
+  try {
+    await ticketsStore.renewTicket(ticket, days)
+    // Refresh dashboard data after renewal
+    await Promise.all([
+      loadTicketStats(),
+      ticketsStore.loadExpiringTickets()
+    ])
+  } catch (error) {
+    // Error handling is done in the store
+  }
+}
+
+const handleTicketUpdated = async (updatedTicket) => {
+  // Refresh dashboard data after ticket update
+  await Promise.all([
+    loadTicketStats(),
+    loadRecentLogs(),
+    ticketsStore.loadExpiringTickets()
+  ])
+}
+
 onMounted(async () => {
   if (!authStore.user) {
     try {
@@ -345,6 +398,12 @@ onMounted(async () => {
   
   // Load dashboard data
   await loadDashboardData()
+  
+  // Load expiring tickets for the table
+  await ticketsStore.loadExpiringTickets()
+  
+  // Load contractors for ticket operations (only for admin users)
+  await ticketsStore.loadContractors(authStore.user?.role)
 })
 </script>
 

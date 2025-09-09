@@ -1,5 +1,5 @@
 <template>
-  <div class="ticket-card border-bottom">
+  <div class="ticket-card border-bottom clickable-row" @click="handleRowClick">
     <div class="row align-items-center p-3">
       <!-- Ticket Info -->
       <div class="col-md-6">
@@ -51,17 +51,9 @@
         <div class="d-flex justify-content-end">
           <div class="btn-group" role="group">
             <button 
-              class="btn btn-outline-primary btn-sm"
-              @click="$emit('view', ticket)"
-              title="View Details"
-            >
-              <i class="bi bi-eye"></i>
-            </button>
-            
-            <button 
               v-if="canEdit"
               class="btn btn-outline-secondary btn-sm"
-              @click="$emit('edit', ticket)"
+              @click.stop="ticketsStore.openEditModal(ticket)"
               title="Edit Ticket"
             >
               <i class="bi bi-pencil"></i>
@@ -72,6 +64,7 @@
                 class="btn btn-outline-info btn-sm dropdown-toggle"
                 data-bs-toggle="dropdown"
                 title="Actions"
+                @click.stop
               >
                 <i class="bi bi-three-dots"></i>
               </button>
@@ -80,7 +73,7 @@
                   <a 
                     class="dropdown-item"
                     href="#"
-                    @click.prevent="$emit('renew', ticket)"
+                    @click.prevent.stop="ticketsStore.renewTicket(ticket)"
                   >
                     <i class="bi bi-arrow-clockwise me-2"></i>
                     Renew (+15 days)
@@ -90,7 +83,7 @@
                   <a 
                     class="dropdown-item"
                     href="#"
-                    @click.prevent="$emit('assign', ticket)"
+                    @click.prevent.stop="ticketsStore.openAssignModal(ticket, authStore.user?.role)"
                   >
                     <i class="bi bi-person-plus me-2"></i>
                     Reassign
@@ -101,7 +94,7 @@
                   <a 
                     class="dropdown-item text-danger"
                     href="#"
-                    @click.prevent="$emit('close', ticket)"
+                    @click.prevent.stop="ticketsStore.closeTicket(ticket)"
                   >
                     <i class="bi bi-x-circle me-2"></i>
                     Close Ticket
@@ -129,8 +122,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { useTicketsStore } from '@/stores/tickets.js'
 
 const authStore = useAuthStore()
+const ticketsStore = useTicketsStore()
 
 // Props
 const props = defineProps({
@@ -140,8 +135,10 @@ const props = defineProps({
   }
 })
 
-// Emits
-defineEmits(['view', 'edit', 'renew', 'close', 'assign'])
+// Methods
+const handleRowClick = () => {
+  ticketsStore.selectTicket(props.ticket)
+}
 
 // Computed properties
 const statusClass = computed(() => {
@@ -228,8 +225,14 @@ const truncateNotes = (notes) => {
   transition: all 0.2s ease-in-out;
 }
 
-.ticket-card:hover {
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
   background-color: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .ticket-status-indicator {

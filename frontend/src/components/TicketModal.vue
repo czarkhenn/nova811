@@ -185,6 +185,9 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 // Props
 const props = defineProps({
@@ -203,7 +206,7 @@ const props = defineProps({
 })
 
 // Emits
-defineEmits(['close', 'save'])
+const emit = defineEmits(['close', 'save'])
 
 // Reactive data
 const loading = ref(false)
@@ -271,6 +274,9 @@ const setExpirationDays = (days) => {
   date.setDate(date.getDate() + days)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   form.value.expiration_date = date.toISOString().slice(0, 16)
+  
+  // Show toast notification
+  toast.success(`Expiration date set to ${days} days!`)
 }
 
 const validateForm = () => {
@@ -302,58 +308,27 @@ const validateForm = () => {
   return Object.keys(errors.value).length === 0
 }
 
-const handleSubmit = async () => {
+const handleSubmit = () => {
   if (!validateForm()) {
     return
   }
   
-  loading.value = true
-  
-  try {
-    // Prepare data for API
-    const ticketData = {
-      organization: form.value.organization.trim(),
-      location: form.value.location.trim(),
-      assigned_contractor_id: form.value.assigned_contractor_id,
-      expiration_date: new Date(form.value.expiration_date).toISOString(),
-      notes: form.value.notes.trim()
-    }
-    
-    // Add status for edit mode
-    if (isEdit.value) {
-      ticketData.status = form.value.status
-    }
-    
-    // Emit save event
-    await new Promise((resolve, reject) => {
-      const cleanup = () => {
-        loading.value = false
-      }
-      
-      // Listen for success/error from parent
-      const handleSave = () => {
-        cleanup()
-        resolve()
-      }
-      
-      const handleError = () => {
-        cleanup()
-        reject(new Error('Save failed'))
-      }
-      
-      // Emit the save event
-      emit('save', ticketData)
-      
-      // Simulate async operation
-      setTimeout(handleSave, 100)
-    })
-    
-  } catch (error) {
-    console.error('Error saving ticket:', error)
-    errors.value.general = 'Failed to save ticket. Please try again.'
-  } finally {
-    loading.value = false
+  // Prepare data for API
+  const ticketData = {
+    organization: form.value.organization.trim(),
+    location: form.value.location.trim(),
+    assigned_contractor_id: form.value.assigned_contractor_id,
+    expiration_date: new Date(form.value.expiration_date).toISOString(),
+    notes: form.value.notes.trim()
   }
+  
+  // Add status for edit mode
+  if (isEdit.value) {
+    ticketData.status = form.value.status
+  }
+  
+  // Emit save event - let parent handle the API call and loading
+  emit('save', ticketData)
 }
 
 // Watch for prop changes

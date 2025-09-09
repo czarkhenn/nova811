@@ -406,7 +406,6 @@ const handleRegister = async () => {
     toast.success('Registration successful! Please check your email to activate your account.')
     router.push('/login')
   } catch (error) {
-    console.error('Registration error:', error)
     toast.error('Registration failed. Please check your information and try again.')
   }
 }

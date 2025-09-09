@@ -5,12 +5,12 @@
         <div class="modal-header">
           <h5 class="modal-title">
             <i class="bi bi-ticket-perforated me-2"></i>
-            {{ ticket.ticket_number }} - {{ ticket.organization }}
+            {{ ticket?.ticket_number || 'Loading...' }} - {{ ticket?.organization || '' }}
           </h5>
           <button type="button" class="btn-close" @click="$emit('close')"></button>
         </div>
         
-        <div class="modal-body">
+        <div class="modal-body" v-if="ticket">
           <div class="row">
             <!-- Main Ticket Info -->
             <div class="col-lg-8">
@@ -21,23 +21,72 @@
                     Ticket Details
                   </h6>
                 </div>
-                <div class="card-body">
+                <div class="card-body" :class="{ 'editing-mode': isEditing }">
                   <div class="row g-3">
                     <div class="col-md-6">
                       <label class="form-label text-muted">Organization</label>
-                      <p class="fw-semibold">{{ ticket.organization }}</p>
+                      <div v-if="!isEditing">
+                        <p class="fw-semibold">{{ ticket?.organization || 'N/A' }}</p>
+                      </div>
+                      <div v-else>
+                        <input 
+                          type="text" 
+                          class="form-control"
+                          :class="{ 'is-invalid': validationErrors.organization }"
+                          v-model="editForm.organization"
+                          placeholder="Enter organization name"
+                        >
+                        <div v-if="validationErrors.organization" class="invalid-feedback">
+                          {{ validationErrors.organization }}
+                        </div>
+                      </div>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label text-muted">Location</label>
-                      <p class="fw-semibold">{{ ticket.location }}</p>
+                      <div v-if="!isEditing">
+                        <p class="fw-semibold">{{ ticket?.location || 'N/A' }}</p>
+                      </div>
+                      <div v-else>
+                        <input 
+                          type="text" 
+                          class="form-control"
+                          :class="{ 'is-invalid': validationErrors.location }"
+                          v-model="editForm.location"
+                          placeholder="Enter location"
+                        >
+                        <div v-if="validationErrors.location" class="invalid-feedback">
+                          {{ validationErrors.location }}
+                        </div>
+                      </div>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label text-muted">Status</label>
-                      <p>
-                        <span class="badge" :class="statusBadgeClass">
-                          {{ ticket.status_display }}
-                        </span>
-                      </p>
+                      <div v-if="!isEditing">
+                        <p>
+                          <span class="badge" :class="statusBadgeClass">
+                            {{ ticket?.status_display || ticket?.status || 'N/A' }}
+                          </span>
+                        </p>
+                      </div>
+                      <div v-else>
+                        <select 
+                          class="form-select"
+                          :class="{ 'is-invalid': validationErrors.status }"
+                          v-model="editForm.status"
+                        >
+                          <option value="">Select status</option>
+                          <option 
+                            v-for="option in statusOptions" 
+                            :key="option.value" 
+                            :value="option.value"
+                          >
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <div v-if="validationErrors.status" class="invalid-feedback">
+                          {{ validationErrors.status }}
+                        </div>
+                      </div>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label text-muted">Expiration Status</label>
@@ -46,10 +95,21 @@
                         {{ expirationStatus }}
                       </p>
                     </div>
-                    <div class="col-12" v-if="ticket.notes">
+                    <div class="col-12">
                       <label class="form-label text-muted">Notes</label>
-                      <div class="notes-content">
-                        {{ ticket.notes }}
+                      <div v-if="!isEditing">
+                        <div v-if="ticket?.notes" class="notes-content">
+                          {{ ticket.notes }}
+                        </div>
+                        <p v-else class="text-muted fst-italic">No notes available</p>
+                      </div>
+                      <div v-else>
+                        <textarea 
+                          class="form-control"
+                          rows="4"
+                          v-model="editForm.notes"
+                          placeholder="Enter notes (optional)"
+                        ></textarea>
                       </div>
                     </div>
                   </div>
@@ -135,11 +195,6 @@
                             <p class="text-muted mb-1">
                               by {{ log.action_by ? `${log.action_by.first_name} ${log.action_by.last_name}` : 'System' }}
                             </p>
-                            <div v-if="log.details && Object.keys(log.details).length > 0" class="log-details">
-                              <small class="text-muted">
-                                <pre>{{ JSON.stringify(log.details, null, 2) }}</pre>
-                              </small>
-                            </div>
                           </div>
                           <small class="text-muted">
                             {{ formatDateTime(log.timestamp) }}
@@ -168,41 +223,66 @@
                 </div>
                 <div class="card-body">
                   <div class="d-grid gap-2">
-                    <button 
-                      v-if="canEdit"
-                      class="btn btn-outline-primary"
-                      @click="$emit('edit', ticket)"
-                    >
-                      <i class="bi bi-pencil me-2"></i>
-                      Edit Ticket
-                    </button>
+                    <!-- Edit Mode Actions -->
+                    <template v-if="isEditing">
+                      <button 
+                        class="btn btn-success"
+                        @click="saveChanges"
+                        :disabled="isSaving"
+                      >
+                        <span v-if="isSaving" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <i v-else class="bi bi-check-lg me-2"></i>
+                        {{ isSaving ? 'Saving...' : 'Save Changes' }}
+                      </button>
+                      
+                      <button 
+                        class="btn btn-outline-secondary"
+                        @click="cancelEditing"
+                        :disabled="isSaving"
+                      >
+                        <i class="bi bi-x-lg me-2"></i>
+                        Cancel
+                      </button>
+                    </template>
                     
-                    <button 
-                      v-if="canRenew"
-                      class="btn btn-outline-success"
-                      @click="$emit('renew', ticket)"
-                    >
-                      <i class="bi bi-arrow-clockwise me-2"></i>
-                      Renew (+15 days)
-                    </button>
-                    
-                    <button 
-                      v-if="authStore.isAdmin"
-                      class="btn btn-outline-info"
-                      @click="$emit('assign', ticket)"
-                    >
-                      <i class="bi bi-person-plus me-2"></i>
-                      Reassign Contractor
-                    </button>
-                    
-                    <button 
-                      v-if="canClose"
-                      class="btn btn-outline-danger"
-                      @click="$emit('close-ticket', ticket)"
-                    >
-                      <i class="bi bi-x-circle me-2"></i>
-                      Close Ticket
-                    </button>
+                    <!-- Normal Mode Actions -->
+                    <template v-else>
+                      <button 
+                        v-if="canEdit"
+                        class="btn btn-outline-primary"
+                        @click="startEditing"
+                      >
+                        <i class="bi bi-pencil me-2"></i>
+                        Edit Ticket
+                      </button>
+                      
+                      <button 
+                        v-if="canRenew"
+                        class="btn btn-outline-success"
+                        @click="$emit('renew', ticket)"
+                      >
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        Renew (+15 days)
+                      </button>
+                      
+                      <button 
+                        v-if="authStore.isAdmin"
+                        class="btn btn-outline-info"
+                        @click="$emit('assign', ticket)"
+                      >
+                        <i class="bi bi-person-plus me-2"></i>
+                        Reassign Contractor
+                      </button>
+                      
+                      <button 
+                        v-if="canClose"
+                        class="btn btn-outline-danger"
+                        @click="$emit('close-ticket', ticket)"
+                      >
+                        <i class="bi bi-x-circle me-2"></i>
+                        Close Ticket
+                      </button>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -253,20 +333,46 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="$emit('close')">
+          <button type="button" class="btn btn-secondary" @click="ticketsStore.closeDetailModal()">
             Close
           </button>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Audit Trail Modal -->
+  <AuditTrailModal
+    v-if="ticketsStore.showAuditTrailModal"
+    :show="ticketsStore.showAuditTrailModal"
+    :ticket="ticketsStore.selectedTicket"
+    @close="ticketsStore.closeAuditTrailModal"
+  />
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { useTicketsStore } from '@/stores/tickets.js'
+import { useToast } from 'vue-toastification'
+import AuditTrailModal from '@/components/AuditTrailModal.vue'
+import api from '@/services/api.js'
 
 const authStore = useAuthStore()
+const ticketsStore = useTicketsStore()
+const toast = useToast()
+
+// Reactive data
+const showAuditTrail = ref(false)
+const isEditing = ref(false)
+const isSaving = ref(false)
+const editForm = ref({
+  organization: '',
+  location: '',
+  status: '',
+  notes: ''
+})
+const validationErrors = ref({})
 
 // Props
 const props = defineProps({
@@ -281,10 +387,11 @@ const props = defineProps({
 })
 
 // Emits
-defineEmits(['close', 'edit', 'renew', 'close-ticket', 'assign'])
+const emit = defineEmits(['close', 'edit', 'renew', 'close-ticket', 'assign', 'ticket-updated'])
 
 // Computed properties
 const statusBadgeClass = computed(() => {
+  if (!props.ticket) return 'bg-secondary'
   const classes = {
     'open': 'bg-success',
     'in_progress': 'bg-warning text-dark',
@@ -294,25 +401,28 @@ const statusBadgeClass = computed(() => {
 })
 
 const expirationClass = computed(() => {
+  if (!props.ticket) return 'text-muted'
   if (props.ticket.is_expired) return 'text-danger'
   if (props.ticket.is_expiring_soon) return 'text-warning'
   return 'text-success'
 })
 
 const expirationIcon = computed(() => {
+  if (!props.ticket) return 'bi bi-question-circle'
   if (props.ticket.is_expired) return 'bi bi-x-circle-fill'
   if (props.ticket.is_expiring_soon) return 'bi bi-exclamation-triangle-fill'
   return 'bi bi-check-circle-fill'
 })
 
 const expirationStatus = computed(() => {
+  if (!props.ticket) return 'Loading...'
   if (props.ticket.is_expired) return 'Expired'
   if (props.ticket.is_expiring_soon) return 'Expiring Soon'
   return 'Active'
 })
 
 const timeRemaining = computed(() => {
-  if (props.ticket.is_expired) return 'Expired'
+  if (!props.ticket || props.ticket.is_expired) return 'Expired'
   
   const now = new Date()
   const expiration = new Date(props.ticket.expiration_date)
@@ -331,25 +441,27 @@ const timeRemaining = computed(() => {
 })
 
 const canEdit = computed(() => {
+  if (!props.ticket) return false
   if (authStore.isAdmin) return true
-  if (authStore.isContractor && props.ticket.assigned_contractor.id === authStore.user?.id) {
+  if (authStore.isContractor && props.ticket.assigned_contractor?.id === authStore.user?.id) {
     return props.ticket.status !== 'closed'
   }
   return false
 })
 
 const canRenew = computed(() => {
+  if (!props.ticket) return false
   if (authStore.isAdmin) return true
-  if (authStore.isContractor && props.ticket.assigned_contractor.id === authStore.user?.id) {
+  if (authStore.isContractor && props.ticket.assigned_contractor?.id === authStore.user?.id) {
     return props.ticket.status !== 'closed'
   }
   return false
 })
 
 const canClose = computed(() => {
-  if (props.ticket.status === 'closed') return false
+  if (!props.ticket || props.ticket.status === 'closed') return false
   if (authStore.isAdmin) return true
-  if (authStore.isContractor && props.ticket.assigned_contractor.id === authStore.user?.id) {
+  if (authStore.isContractor && props.ticket.assigned_contractor?.id === authStore.user?.id) {
     return true
   }
   return false
@@ -386,6 +498,109 @@ const getLogMarkerClass = (action) => {
   }
   return classes[action] || 'bg-secondary'
 }
+
+const formatFieldName = (field) => {
+  return field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Edit methods
+const initializeEditForm = () => {
+  if (props.ticket) {
+    editForm.value = {
+      organization: props.ticket.organization || '',
+      location: props.ticket.location || '',
+      status: props.ticket.status || '',
+      notes: props.ticket.notes || ''
+    }
+  }
+}
+
+// Watch for ticket changes to initialize edit form
+watch(() => props.ticket, (newTicket) => {
+  if (newTicket) {
+    initializeEditForm()
+  }
+}, { immediate: true })
+
+const startEditing = () => {
+  initializeEditForm()
+  isEditing.value = true
+  validationErrors.value = {}
+}
+
+const cancelEditing = () => {
+  isEditing.value = false
+  validationErrors.value = {}
+  initializeEditForm() // Reset form to original values
+}
+
+const validateForm = () => {
+  const errors = {}
+  
+  if (!editForm.value.organization?.trim()) {
+    errors.organization = 'Organization is required'
+  }
+  
+  if (!editForm.value.location?.trim()) {
+    errors.location = 'Location is required'
+  }
+  
+  if (!editForm.value.status) {
+    errors.status = 'Status is required'
+  }
+  
+  validationErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+const saveChanges = async () => {
+  if (!validateForm()) {
+    toast.error('Please fix the validation errors')
+    return
+  }
+  
+  try {
+    isSaving.value = true
+    
+    const updatedData = {
+      organization: editForm.value.organization.trim(),
+      location: editForm.value.location.trim(),
+      status: editForm.value.status,
+      notes: editForm.value.notes?.trim() || ''
+    }
+    
+    // Ensure the ticket is set in the store before calling updateTicket
+    if (!ticketsStore.selectedTicket || ticketsStore.selectedTicket.id !== props.ticket.id) {
+      ticketsStore.selectedTicket = props.ticket
+    }
+    
+    await ticketsStore.updateTicket(updatedData)
+    
+    isEditing.value = false
+    
+    // Refresh the ticket data
+    if (props.ticket?.id) {
+      const response = await api.get(`/tickets/${props.ticket.id}/`)
+      // Update the ticket in the store and emit to parent
+      ticketsStore.selectedTicket = response.data
+      // Also emit the updated ticket to the parent component
+      emit('ticket-updated', response.data)
+    }
+    
+  } catch (error) {
+    console.error('Error updating ticket:', error)
+    toast.error('Failed to update ticket')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Available status options
+const statusOptions = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'closed', label: 'Closed' }
+]
 </script>
 
 <style scoped>
@@ -478,5 +693,27 @@ const getLogMarkerClass = (action) => {
   padding: 1rem;
   border-radius: 0.5rem;
   background-color: rgba(0, 0, 0, 0.02);
+}
+
+.editing-mode {
+  background-color: #f8f9fa;
+  border: 2px dashed #007bff;
+  border-radius: 0.5rem;
+}
+
+.editing-mode .form-control,
+.editing-mode .form-select {
+  border-color: #007bff;
+}
+
+.editing-mode .form-control:focus,
+.editing-mode .form-select:focus {
+  border-color: #0056b3;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
 }
 </style>

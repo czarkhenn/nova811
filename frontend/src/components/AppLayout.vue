@@ -33,10 +33,10 @@
                 Tickets
               </router-link>
             </li>
-            <li v-if="authStore.isAdmin" class="nav-item">
-              <router-link to="/users" class="nav-link" active-class="active">
-                <i class="bi bi-people me-1"></i>
-                Users
+            <li class="nav-item">
+              <router-link to="/logs" class="nav-link" active-class="active">
+                <i class="bi bi-journal-text me-1"></i>
+                Activity Logs
               </router-link>
             </li>
           </ul>
@@ -72,27 +72,77 @@
       </div>
     </nav>
 
+
     <main class="main-content">
       <div class="container-fluid py-4">
         <slot />
       </div>
     </main>
+
+    <!-- Global Ticket Modals -->
+    <TicketDetailModal 
+      v-if="ticketsStore.showDetailModal && ticketsStore.selectedTicket"
+      :show="ticketsStore.showDetailModal"
+      :ticket="ticketsStore.selectedTicket"
+      @close="ticketsStore.closeDetailModal"
+      @edit="ticketsStore.openEditModal"
+      @renew="handleRenewTicket"
+      @close-ticket="handleCloseTicket"
+      @assign="(ticket) => ticketsStore.openAssignModal(ticket, authStore.user?.role)"
+    />
+    
+    <AssignTicketModal 
+      v-if="ticketsStore.showAssignModal && ticketsStore.selectedTicket"
+      :show="ticketsStore.showAssignModal"
+      :ticket="ticketsStore.selectedTicket"
+      @close="ticketsStore.closeAssignModal"
+    />
+    
+    <AuditTrailModal 
+      v-if="ticketsStore.showAuditTrailModal && ticketsStore.selectedTicket"
+      :show="ticketsStore.showAuditTrailModal"
+      :ticket="ticketsStore.selectedTicket"
+      @close="ticketsStore.closeAuditTrailModal"
+    />
   </div>
 </template>
 
 <script setup>
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useTicketsStore } from '@/stores/tickets.js'
 import { useToast } from 'vue-toastification'
+import TicketDetailModal from './TicketDetailModal.vue'
+import AssignTicketModal from './AssignTicketModal.vue'
+import AuditTrailModal from './AuditTrailModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const ticketsStore = useTicketsStore()
 const toast = useToast()
 
 const handleLogout = () => {
   authStore.logout()
   toast.success('Logged out successfully')
   router.push('/login')
+}
+
+const handleRenewTicket = async (ticket) => {
+  try {
+    await ticketsStore.renewTicket(ticket, 15)
+    ticketsStore.closeDetailModal()
+  } catch (error) {
+    // Error handling is done in the store
+  }
+}
+
+const handleCloseTicket = async (ticket) => {
+  try {
+    await ticketsStore.closeTicket(ticket)
+    ticketsStore.closeDetailModal()
+  } catch (error) {
+    // Error handling is done in the store
+  }
 }
 </script>
 

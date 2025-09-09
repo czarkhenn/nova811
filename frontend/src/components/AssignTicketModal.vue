@@ -1,14 +1,15 @@
 <template>
-  <div class="modal fade" id="assignTicketModal" tabindex="-1" aria-labelledby="assignTicketModalLabel" aria-hidden="true">
+  <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="assignTicketModalLabel">
+          <h5 class="modal-title">
             <i class="bi bi-person-plus me-2"></i>
-            Assign Ticket
+            Reassign Ticket
           </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close" @click="ticketsStore.closeAssignModal()"></button>
         </div>
+        
         <div class="modal-body">
           <div v-if="ticket" class="mb-3">
             <div class="card bg-light">
@@ -18,8 +19,8 @@
                     <strong>{{ ticket.ticket_number }}</strong>
                     <span class="text-muted ms-2">{{ ticket.organization }}</span>
                   </div>
-                  <span :class="getStatusBadgeClass(ticket.status)">
-                    {{ ticket.status }}
+                  <span class="badge" :class="getStatusBadgeClass(ticket.status)">
+                    {{ ticket.status_display || ticket.status }}
                   </span>
                 </div>
                 <small class="text-muted">{{ ticket.location }}</small>
@@ -35,43 +36,30 @@
               </label>
               <select 
                 id="assignedContractor" 
-                v-model="form.assigned_contractor" 
+                v-model="selectedContractorId" 
                 class="form-select"
                 :class="{ 'is-invalid': errors.assigned_contractor }"
                 required
               >
                 <option value="">Select a contractor...</option>
                 <option 
-                  v-for="contractor in contractors" 
+                  v-for="contractor in availableContractors" 
                   :key="contractor.id" 
                   :value="contractor.id"
                 >
                   {{ contractor.first_name }} {{ contractor.last_name }} ({{ contractor.email }})
                 </option>
               </select>
+              <div v-if="contractorsLoading" class="form-text">
+                <i class="bi bi-hourglass-split me-1"></i>
+                Loading contractors...
+              </div>
+              <div v-else-if="availableContractors.length === 0" class="form-text text-warning">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                No contractors available
+              </div>
               <div v-if="errors.assigned_contractor" class="invalid-feedback">
                 {{ errors.assigned_contractor }}
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label for="assignmentNotes" class="form-label">
-                <i class="bi bi-chat-text me-1"></i>
-                Assignment Notes
-              </label>
-              <textarea 
-                id="assignmentNotes" 
-                v-model="form.notes" 
-                class="form-control"
-                :class="{ 'is-invalid': errors.notes }"
-                rows="3"
-                placeholder="Add any notes about this assignment..."
-              ></textarea>
-              <div v-if="errors.notes" class="invalid-feedback">
-                {{ errors.notes }}
-              </div>
-              <div class="form-text">
-                Optional notes will be added to the ticket's activity log.
               </div>
             </div>
 
@@ -81,10 +69,16 @@
               {{ ticket.assigned_contractor.first_name }} {{ ticket.assigned_contractor.last_name }}
               ({{ ticket.assigned_contractor.email }})
             </div>
+
+            <div v-if="errors.general || ticketsStore.assignmentError" class="alert alert-danger">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              {{ errors.general || ticketsStore.assignmentError }}
+            </div>
           </form>
         </div>
+        
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <button type="button" class="btn btn-secondary" @click="ticketsStore.closeAssignModal()">
             <i class="bi bi-x-circle me-1"></i>
             Cancel
           </button>
@@ -92,11 +86,11 @@
             type="button" 
             class="btn btn-primary" 
             @click="handleAssign"
-            :disabled="loading || !form.assigned_contractor"
+            :disabled="ticketsStore.assignmentLoading || !selectedContractorId"
           >
-            <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            <span v-if="ticketsStore.assignmentLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             <i v-else class="bi bi-person-check me-1"></i>
-            {{ loading ? 'Assigning...' : 'Assign Ticket' }}
+            {{ ticketsStore.assignmentLoading ? 'Assigning...' : 'Reassign Ticket' }}
           </button>
         </div>
       </div>
@@ -104,161 +98,150 @@
   </div>
 </template>
 
-<script>
-import { ref, reactive, watch } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import api from '@/services/api'
+<script setup>
+import { ref, watch, onMounted, computed } from 'vue'
+import { useTicketsStore } from '@/stores/tickets.js'
+import { useAuthStore } from '@/stores/auth.js'
 
-export default {
-  name: 'AssignTicketModal',
-  props: {
-    ticket: {
-      type: Object,
-      default: null
-    }
+// Props
+const props = defineProps({
+  show: {
+    type: Boolean,
+    default: false
   },
-  emits: ['ticket-assigned'],
-  setup(props, { emit }) {
-    const authStore = useAuthStore()
-    const loading = ref(false)
-    const contractors = ref([])
-    const errors = reactive({})
+  ticket: {
+    type: Object,
+    default: null
+  },
+  contractors: {
+    type: Array,
+    default: () => []
+  }
+})
 
-    const form = reactive({
-      assigned_contractor: '',
-      notes: ''
-    })
+// Store
+const ticketsStore = useTicketsStore()
+const authStore = useAuthStore()
 
-    // Reset form when ticket changes
-    watch(() => props.ticket, (newTicket) => {
-      if (newTicket) {
-        form.assigned_contractor = newTicket.assigned_contractor?.id || ''
-        form.notes = ''
-        clearErrors()
-      }
-    })
+// Reactive data
+const selectedContractorId = ref('')
+const errors = ref({})
+const contractorsLoading = ref(false)
 
-    const clearErrors = () => {
-      Object.keys(errors).forEach(key => {
-        delete errors[key]
-      })
-    }
+// Methods
+const clearErrors = () => {
+  errors.value = {}
+}
 
-    const loadContractors = async () => {
-      try {
-        const response = await api.get('/users/', {
-          params: { role: 'contractor' }
-        })
-        contractors.value = response.data.results || response.data
-      } catch (error) {
-        console.error('Error loading contractors:', error)
-      }
-    }
-
-    const validateForm = () => {
-      clearErrors()
-      let isValid = true
-
-      if (!form.assigned_contractor) {
-        errors.assigned_contractor = 'Please select a contractor'
-        isValid = false
-      }
-
-      if (form.notes && form.notes.length > 500) {
-        errors.notes = 'Notes cannot exceed 500 characters'
-        isValid = false
-      }
-
-      return isValid
-    }
-
-    const handleAssign = async () => {
-      if (!validateForm()) {
-        return
-      }
-
-      loading.value = true
-      clearErrors()
-
-      try {
-        const payload = {
-          assigned_contractor: form.assigned_contractor
-        }
-
-        if (form.notes.trim()) {
-          payload.notes = form.notes.trim()
-        }
-
-        const response = await api.post(`/tickets/${props.ticket.id}/assign/`, payload)
-        
-        emit('ticket-assigned', response.data)
-        
-        // Close modal
-        const modal = document.getElementById('assignTicketModal')
-        const bsModal = window.bootstrap.Modal.getInstance(modal)
-        if (bsModal) {
-          bsModal.hide()
-        }
-
-        // Reset form
-        form.assigned_contractor = ''
-        form.notes = ''
-
-      } catch (error) {
-        console.error('Error assigning ticket:', error)
-        
-        if (error.response?.data) {
-          const errorData = error.response.data
-          if (typeof errorData === 'object') {
-            Object.keys(errorData).forEach(key => {
-              if (key in form) {
-                errors[key] = Array.isArray(errorData[key]) 
-                  ? errorData[key][0] 
-                  : errorData[key]
-              }
-            })
-          } else {
-            errors.general = 'Failed to assign ticket. Please try again.'
-          }
-        } else {
-          errors.general = 'Network error. Please check your connection and try again.'
-        }
-      } finally {
-        loading.value = false
-      }
-    }
-
-    const getStatusBadgeClass = (status) => {
-      const statusClasses = {
-        'open': 'badge bg-success',
-        'in_progress': 'badge bg-warning text-dark',
-        'pending': 'badge bg-info',
-        'closed': 'badge bg-secondary',
-        'expired': 'badge bg-danger'
-      }
-      return statusClasses[status] || 'badge bg-secondary'
-    }
-
-    // Load contractors when component mounts
-    loadContractors()
-
-    return {
-      loading,
-      contractors,
-      form,
-      errors,
-      handleAssign,
-      getStatusBadgeClass,
-      clearErrors
+// Ensure contractors are loaded when modal opens
+const ensureContractorsLoaded = async () => {
+  if (authStore.isAdmin && (!props.contractors || props.contractors.length === 0)) {
+    contractorsLoading.value = true
+    try {
+      await ticketsStore.loadContractors()
+    } catch (error) {
+      console.error('Failed to load contractors:', error)
+    } finally {
+      contractorsLoading.value = false
     }
   }
+}
+
+// Watch for modal show changes to load contractors
+watch(() => props.show, (isShowing) => {
+  if (isShowing) {
+    ensureContractorsLoaded()
+  }
+}, { immediate: true })
+
+// Watch for ticket changes to reset form
+watch(() => props.ticket, (newTicket) => {
+  if (newTicket) {
+    selectedContractorId.value = newTicket.assigned_contractor?.id || ''
+    clearErrors()
+  }
+}, { immediate: true })
+
+// Load contractors on mount if needed
+onMounted(() => {
+  if (props.show) {
+    ensureContractorsLoaded()
+  }
+})
+
+// Computed property to get contractors from either props or store
+const availableContractors = computed(() => {
+  // Use contractors from store if available, otherwise use props
+  return ticketsStore.contractors.length > 0 ? ticketsStore.contractors : props.contractors
+})
+
+const validateForm = () => {
+  clearErrors()
+  let isValid = true
+
+  if (!selectedContractorId.value) {
+    errors.value.assigned_contractor = 'Please select a contractor'
+    isValid = false
+  }
+
+  return isValid
+}
+
+const handleAssign = async () => {
+  if (!validateForm()) {
+    return
+  }
+
+  clearErrors()
+
+  try {
+    // Call the store method directly - it will handle modal closing on success
+    await ticketsStore.assignTicket(props.ticket.id, selectedContractorId.value)
+    // Don't reset form here - let the modal close naturally
+    // The form will be reset when the modal reopens due to the watch
+  } catch (error) {
+    // Handle any additional errors if needed
+    if (ticketsStore.assignmentError) {
+      errors.value.general = ticketsStore.assignmentError
+    }
+  }
+}
+
+const getStatusBadgeClass = (status) => {
+  const statusClasses = {
+    'open': 'bg-success',
+    'in_progress': 'bg-warning text-dark',
+    'pending': 'bg-info',
+    'closed': 'bg-secondary',
+    'expired': 'bg-danger'
+  }
+  return statusClasses[status] || 'bg-secondary'
 }
 </script>
 
 <style scoped>
-.modal-body {
-  max-height: 70vh;
-  overflow-y: auto;
+.modal {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-dialog {
+  animation: slideIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .card {
@@ -293,10 +276,5 @@ export default {
 
 .invalid-feedback {
   display: block;
-}
-
-.form-text {
-  font-size: 0.875em;
-  color: #6c757d;
 }
 </style>

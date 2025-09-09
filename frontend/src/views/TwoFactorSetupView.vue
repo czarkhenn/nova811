@@ -13,12 +13,22 @@
 
               <!-- User Message -->
               <div class="text-center mb-4">
-                <div class="alert alert-info border-0" style="background-color: #e3f2fd;">
-                  <i class="bi bi-info-circle me-2"></i>
+                <div 
+                  class="alert border-0" 
+                  :class="isTwoFactorEnabled ? 'alert-success' : 'alert-info'"
+                  :style="isTwoFactorEnabled ? 'background-color: #d1e7dd;' : 'background-color: #e3f2fd;'"
+                >
+                  <i 
+                    class="me-2" 
+                    :class="isTwoFactorEnabled ? 'bi bi-check-circle-fill text-success' : 'bi bi-info-circle'"
+                  ></i>
                   <div>
-                    <strong>Welcome!</strong><br>
+                    <strong>{{ isTwoFactorEnabled ? 'Great!' : 'Welcome!' }}</strong><br>
                     <span class="text-muted">
-                      You can enable two-factor authentication for enhanced security, or skip this step for now.
+                      {{ isTwoFactorEnabled 
+                        ? 'Two-factor authentication is already enabled for your account.' 
+                        : 'You can enable two-factor authentication for enhanced security, or skip this step for now.' 
+                      }}
                     </span>
                   </div>
                 </div>
@@ -27,7 +37,7 @@
               <!-- Verification Code Input -->
               <div class="mb-4">
                 <label for="verificationCode" class="form-label fw-semibold">
-                  Verification Code (Optional)
+                  Verification Code
                 </label>
                 <div class="input-group">
                   <span class="input-group-text bg-light border-end-0">
@@ -60,7 +70,7 @@
                   type="button"
                   class="btn btn-primary flex-fill"
                   @click="handleVerify"
-                  :disabled="isLoading || !verificationCode.trim()"
+                  :disabled="isEnableButtonDisabled"
                 >
                   <span
                     v-if="isLoading && !isSkipping"
@@ -68,7 +78,7 @@
                     role="status"
                     aria-hidden="true"
                   ></span>
-                  {{ isLoading && !isSkipping ? 'Enabling 2FA...' : 'Enable 2FA' }}
+                  {{ enableButtonText }}
                 </button>
                 
                 <button
@@ -103,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToast } from 'vue-toastification'
@@ -118,6 +128,22 @@ const isLoading = ref(false)
 const isSkipping = ref(false)
 const hasError = ref(false)
 const errorMessage = ref('')
+
+// Computed properties
+const isTwoFactorEnabled = computed(() => {
+  return authStore.user?.two_factor_enabled === true
+})
+
+const enableButtonText = computed(() => {
+  if (isTwoFactorEnabled.value) {
+    return isLoading.value && !isSkipping.value ? 'Verifying...' : 'Verify'
+  }
+  return isLoading.value && !isSkipping.value ? 'Enabling 2FA...' : 'Enable 2FA'
+})
+
+const isEnableButtonDisabled = computed(() => {
+  return isLoading.value || !verificationCode.value.trim()
+})
 
 // Methods
 const clearError = () => {
@@ -189,10 +215,21 @@ const handleSkip = async () => {
   }
 }
 
-// Focus input on mount
-onMounted(() => {
+// Initialize component on mount
+onMounted(async () => {
+  // Ensure we have the latest user data to check 2FA status
+  try {
+    if (authStore.isAuthenticated && !authStore.user) {
+      await authStore.verifyUser()
+    }
+  } catch (error) {
+    console.error('Failed to fetch user data:', error)
+    // Continue with component initialization even if user fetch fails
+  }
+
+  // Focus input on mount (only if 2FA is not already enabled)
   const input = document.getElementById('verificationCode')
-  if (input) {
+  if (input && !isTwoFactorEnabled.value) {
     input.focus()
   }
 })

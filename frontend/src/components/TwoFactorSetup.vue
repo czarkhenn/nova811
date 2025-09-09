@@ -153,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
 import { authService } from '@/services/auth.js'
 import { useToast } from 'vue-toastification'
 
@@ -176,7 +176,6 @@ const nextStep = async () => {
       isLoading.value = true
       setupData.value = await authService.get2FASetup()
     } catch (error) {
-      console.error('Failed to load 2FA setup data:', error)
       toast.error('Failed to load setup data. Please try again.')
       return
     } finally {
@@ -214,7 +213,6 @@ const verifyAndEnable = async () => {
     currentStep.value = 4
     
   } catch (error) {
-    console.error('2FA enable error:', error)
     if (error.response?.data?.error) {
       errors.verificationCode = error.response.data.error
     } else {

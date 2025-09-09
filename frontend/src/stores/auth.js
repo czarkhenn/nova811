@@ -28,6 +28,10 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   })
 
+  const isContractor = computed(() => {
+    return user.value?.role === 'contractor'
+  })
+
   function isTokenValid() {
     const token = localStorage.getItem('access_token')
     if (!token) return false
@@ -234,6 +238,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isVerified,
     isAdmin,
+    isContractor,
     initAuth,
     login,
     verifyUser,
