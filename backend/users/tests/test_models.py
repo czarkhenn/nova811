@@ -139,6 +139,8 @@ class TestUserModel:
 
     def test_email_uniqueness(self):
         """Test that email must be unique."""
+        from django.db import IntegrityError
+        
         user_data = {
             "email": "test@example.com",
             "password": "testpass123",
@@ -147,8 +149,7 @@ class TestUserModel:
         }
         User.objects.create_user(**user_data)
         
-        # Try to create another user with same email
-        with pytest.raises(Exception):  # IntegrityError or ValidationError
+        with pytest.raises(IntegrityError):
             User.objects.create_user(**user_data)
 
     def test_create_superuser(self):

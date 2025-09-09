@@ -202,12 +202,14 @@ class UserSerializer(BaseUserSerializer):
             "is_contractor",
             "is_active",
             "date_joined",
+            "last_login",
             "two_factor_enabled",
         )
         read_only_fields = (
             "id",
             "username",
             "date_joined",
+            "last_login",
             "is_admin",
             "is_contractor",
             "role_display",

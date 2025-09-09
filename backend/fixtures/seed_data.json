@@ -1,0 +1,384 @@
+{
+  "users": [
+    {
+      "email": "super1@admin.com",
+      "first_name": "Super",
+      "last_name": "Admin",
+      "role": "admin",
+      "phone_number": "+1-555-0001",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    },
+    {
+      "email": "super2@admin.com",
+      "first_name": "Admin",
+      "last_name": "Manager",
+      "role": "admin",
+      "phone_number": "+1-555-0002",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test1@user.com",
+      "first_name": "Test",
+      "last_name": "User One",
+      "role": "contractor",
+      "phone_number": "+1-555-0101",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test2@user.com",
+      "first_name": "Test",
+      "last_name": "User Two",
+      "role": "contractor",
+      "phone_number": "+1-555-0102",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    },
+    {
+      "email": "test3@user.com",
+      "first_name": "Test",
+      "last_name": "User Three",
+      "role": "contractor",
+      "phone_number": "+1-555-0103",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test4@user.com",
+      "first_name": "Test",
+      "last_name": "User Four",
+      "role": "contractor",
+      "phone_number": "+1-555-0104",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    },
+    {
+      "email": "test5@user.com",
+      "first_name": "Test",
+      "last_name": "User Five",
+      "role": "contractor",
+      "phone_number": "+1-555-0105",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test6@user.com",
+      "first_name": "Test",
+      "last_name": "User Six",
+      "role": "contractor",
+      "phone_number": "+1-555-0106",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    },
+    {
+      "email": "test7@user.com",
+      "first_name": "Test",
+      "last_name": "User Seven",
+      "role": "contractor",
+      "phone_number": "+1-555-0107",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test8@user.com",
+      "first_name": "Test",
+      "last_name": "User Eight",
+      "role": "contractor",
+      "phone_number": "+1-555-0108",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    },
+    {
+      "email": "test9@user.com",
+      "first_name": "Test",
+      "last_name": "User Nine",
+      "role": "contractor",
+      "phone_number": "+1-555-0109",
+      "two_factor_enabled": false,
+      "password": "dev123123"
+    },
+    {
+      "email": "test10@user.com",
+      "first_name": "Test",
+      "last_name": "User Ten",
+      "role": "contractor",
+      "phone_number": "+1-555-0110",
+      "two_factor_enabled": true,
+      "password": "dev123123"
+    }
+  ],
+  "tickets": [
+    {
+      "organization": "TechCorp Solutions",
+      "location": "Building A, Floor 3, Room 301",
+      "status": "open",
+      "notes": "Network connectivity issues reported by multiple users. Need to check switch configuration and cable connections.",
+      "assigned_contractor_email": "test1@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 7
+    },
+    {
+      "organization": "Global Manufacturing Inc",
+      "location": "Warehouse B, Loading Dock 2",
+      "status": "in_progress",
+      "notes": "HVAC system maintenance required. Temperature control unit showing error codes. Replacement parts ordered.",
+      "assigned_contractor_email": "test2@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 5
+    },
+    {
+      "organization": "Downtown Medical Center",
+      "location": "Emergency Department, Server Room",
+      "status": "open",
+      "notes": "Critical server backup system failure. Data integrity check needed immediately.",
+      "assigned_contractor_email": "test3@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 1
+    },
+    {
+      "organization": "City Public Library",
+      "location": "Main Branch, Computer Lab",
+      "status": "closed",
+      "notes": "Software updates completed on all public computers. Security patches applied successfully.",
+      "assigned_contractor_email": "test4@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 14
+    },
+    {
+      "organization": "Riverside Elementary School",
+      "location": "Classroom Building, IT Closet",
+      "status": "open",
+      "notes": "WiFi access points need firmware updates. Some classrooms experiencing intermittent connectivity.",
+      "assigned_contractor_email": "test5@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 10
+    },
+    {
+      "organization": "Metro Transit Authority",
+      "location": "Central Station, Control Room",
+      "status": "in_progress",
+      "notes": "Display board system malfunction. LED panels showing incorrect information. Hardware diagnostics in progress.",
+      "assigned_contractor_email": "test6@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 3
+    },
+    {
+      "organization": "Sunset Retail Plaza",
+      "location": "Store 15, Point of Sale Area",
+      "status": "open",
+      "notes": "POS terminal network issues affecting checkout process. Need to verify network configuration and test connectivity.",
+      "assigned_contractor_email": "test7@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 6
+    },
+    {
+      "organization": "Innovation Labs Inc",
+      "location": "Research Wing, Lab 7",
+      "status": "closed",
+      "notes": "Environmental monitoring system calibration completed. All sensors now reporting accurate readings.",
+      "assigned_contractor_email": "test8@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 21
+    },
+    {
+      "organization": "Community Health Clinic",
+      "location": "Reception Area, Front Desk",
+      "status": "open",
+      "notes": "Patient check-in kiosk touchscreen not responding properly. May need screen replacement or driver update.",
+      "assigned_contractor_email": "test9@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 4
+    },
+    {
+      "organization": "Regional Bank Branch",
+      "location": "Main Floor, ATM Area",
+      "status": "in_progress",
+      "notes": "ATM network connectivity intermittent. Working with bank IT team to resolve communication issues.",
+      "assigned_contractor_email": "test10@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 8
+    },
+    {
+      "organization": "University Campus",
+      "location": "Student Center, Computer Lab B",
+      "status": "open",
+      "notes": "Printer network setup for new semester. Need to configure 12 new network printers across multiple floors.",
+      "assigned_contractor_email": "test1@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 12
+    },
+    {
+      "organization": "Corporate Office Tower",
+      "location": "Floor 25, Conference Room A",
+      "status": "closed",
+      "notes": "Video conferencing system upgrade completed. New cameras and microphones installed and tested.",
+      "assigned_contractor_email": "test2@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 30
+    },
+    {
+      "organization": "Local Government Building",
+      "location": "City Hall, IT Department",
+      "status": "open",
+      "notes": "Server room cooling system maintenance. Temperature monitoring shows elevated readings during peak hours.",
+      "assigned_contractor_email": "test3@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 15
+    },
+    {
+      "organization": "Shopping Mall Central",
+      "location": "Food Court, Information Kiosk",
+      "status": "in_progress",
+      "notes": "Digital directory system software update. New store listings and map updates being deployed.",
+      "assigned_contractor_email": "test4@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 9
+    },
+    {
+      "organization": "Emergency Services Center",
+      "location": "Dispatch Center, Communications Room",
+      "status": "open",
+      "notes": "Radio communication system backup power testing. Need to verify UPS systems and generator connectivity.",
+      "assigned_contractor_email": "test5@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 2
+    },
+    {
+      "organization": "Data Center Facility",
+      "location": "Server Room A, Rack 15",
+      "status": "in_progress",
+      "notes": "Hard drive replacement in RAID array. System running on degraded performance until replacement complete.",
+      "assigned_contractor_email": "test6@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 11
+    },
+    {
+      "organization": "Manufacturing Plant",
+      "location": "Production Floor, Control Panel 3",
+      "status": "open",
+      "notes": "Industrial computer showing blue screen errors. Production line affected, urgent repair needed.",
+      "assigned_contractor_email": "test7@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 13
+    },
+    {
+      "organization": "Airport Terminal",
+      "location": "Gate 12, Information Display",
+      "status": "closed",
+      "notes": "Flight information display system updated with new software. All displays now showing correct departure times.",
+      "assigned_contractor_email": "test8@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 45
+    },
+    {
+      "organization": "Hotel Chain Headquarters",
+      "location": "Lobby, Check-in Kiosks",
+      "status": "open",
+      "notes": "Self-service check-in terminals need software updates. Guest complaints about slow response times.",
+      "assigned_contractor_email": "test9@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 16
+    },
+    {
+      "organization": "Sports Stadium",
+      "location": "Concourse Level, Ticket Scanners",
+      "status": "in_progress",
+      "notes": "Ticket scanning system intermittent failures. Working on network connectivity issues before next event.",
+      "assigned_contractor_email": "test10@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 18
+    },
+    {
+      "organization": "Pharmaceutical Company",
+      "location": "Lab Building, Clean Room 5",
+      "status": "on_hold",
+      "notes": "Environmental monitoring system needs recalibration. Waiting for specialized equipment to arrive.",
+      "assigned_contractor_email": "test1@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 25
+    },
+    {
+      "organization": "Logistics Warehouse",
+      "location": "Shipping Dock, Barcode Scanners",
+      "status": "open",
+      "notes": "Handheld barcode scanners losing connection to main system. Affecting package tracking accuracy.",
+      "assigned_contractor_email": "test2@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 20
+    },
+    {
+      "organization": "Research Institute",
+      "location": "Laboratory Wing, Data Collection Server",
+      "status": "on_hold",
+      "notes": "Server hardware upgrade postponed due to budget constraints. Monitoring system performance closely.",
+      "assigned_contractor_email": "test3@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 35
+    },
+    {
+      "organization": "Convention Center",
+      "location": "Main Hall, Audio Visual Equipment",
+      "status": "closed",
+      "notes": "Complete AV system overhaul finished. New projectors and sound system tested and operational.",
+      "assigned_contractor_email": "test4@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 60
+    },
+    {
+      "organization": "Power Plant Facility",
+      "location": "Control Room, Monitoring Systems",
+      "status": "cancelled",
+      "notes": "Scheduled maintenance cancelled due to critical operations. Will reschedule during next planned outage.",
+      "assigned_contractor_email": "test5@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 40
+    },
+    {
+      "organization": "Critical Infrastructure Hub",
+      "location": "Main Server Room, Backup Systems",
+      "status": "open",
+      "notes": "EXPIRED: Backup power system failed during last test. Critical infrastructure at risk without immediate repair.",
+      "assigned_contractor_email": "test6@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": -3
+    },
+    {
+      "organization": "Emergency Response Center",
+      "location": "Communications Tower, Radio Equipment",
+      "status": "in_progress",
+      "notes": "EXPIRED: Radio communication system down for 2 days. Emergency services using backup channels.",
+      "assigned_contractor_email": "test7@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": -2
+    },
+    {
+      "organization": "Financial Services Building",
+      "location": "Trading Floor, Network Infrastructure",
+      "status": "open",
+      "notes": "EXPIRED: Network latency issues affecting trading operations. Revenue impact increasing daily.",
+      "assigned_contractor_email": "test8@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": -7
+    },
+    {
+      "organization": "Healthcare Network",
+      "location": "ICU Ward, Patient Monitoring",
+      "status": "open",
+      "notes": "EXPIRING SOON: Patient monitoring system showing intermittent connectivity issues. Critical for patient safety.",
+      "assigned_contractor_email": "test9@user.com",
+      "created_by_email": "super1@admin.com",
+      "expiration_days_from_now": 1
+    },
+    {
+      "organization": "Transportation Hub",
+      "location": "Central Control, Traffic Management",
+      "status": "in_progress",
+      "notes": "EXPIRING SOON: Traffic control system needs urgent updates before rush hour tomorrow. Public safety concern.",
+      "assigned_contractor_email": "test10@user.com",
+      "created_by_email": "super2@admin.com",
+      "expiration_days_from_now": 2
+    }
+  ]
+}

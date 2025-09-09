@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from datetime import datetime
 
 from .models import Ticket, UserLog, TicketLog
 
@@ -84,17 +83,26 @@ class UserBasicOutputSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'first_name', 'last_name', 'role']
 
 
+class TicketBasicOutputSerializer(serializers.ModelSerializer):
+    """Basic ticket information for logs."""
+    
+    class Meta:
+        model = Ticket
+        fields = ['id', 'ticket_number', 'organization', 'status']
+
+
 class TicketLogOutputSerializer(serializers.ModelSerializer):
     """Output serializer for ticket logs."""
     
     action_by = UserBasicOutputSerializer(read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
+    ticket = TicketBasicOutputSerializer(read_only=True)
     
     class Meta:
         model = TicketLog
         fields = [
             'id', 'action', 'action_display', 'timestamp', 
-            'details', 'previous_values', 'action_by'
+            'details', 'previous_values', 'action_by', 'ticket'
         ]
 
 
@@ -103,13 +111,13 @@ class UserLogOutputSerializer(serializers.ModelSerializer):
     
     user = UserBasicOutputSerializer(read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
-    related_ticket_number = serializers.CharField(source='related_ticket.ticket_number', read_only=True)
+    related_ticket = TicketBasicOutputSerializer(read_only=True)
     
     class Meta:
         model = UserLog
         fields = [
             'id', 'action', 'action_display', 'timestamp', 
-            'details', 'ip_address', 'user', 'related_ticket_number'
+            'details', 'ip_address', 'user', 'related_ticket'
         ]
 
 

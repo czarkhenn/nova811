@@ -68,8 +68,9 @@ class TicketListCreateApi(APIView):
     def get(self, request):
         """List tickets based on user role with filtering and pagination."""
         try:
-            # Parse filter parameters
-            filter_serializer = TicketFilterInputSerializer(data=request.query_params)
+            # Parse filter parameters - handle both DRF Request and Django WSGIRequest
+            query_params = getattr(request, 'query_params', request.GET)
+            filter_serializer = TicketFilterInputSerializer(data=query_params)
             if not filter_serializer.is_valid():
                 return Response(
                     ErrorOutputSerializer({"error": "Invalid filter parameters"}).data,
@@ -86,9 +87,31 @@ class TicketListCreateApi(APIView):
             )
             
             # Apply additional filters
-            if filters.get('expiring_soon'):
-                tickets = TicketSelector.get_expiring_tickets_for_user(request.user)
-            elif filters.get('expired'):
+            expiring_soon = filters.get('expiring_soon')
+            expired = filters.get('expired')
+            
+            if expiring_soon and expired:
+                # Both filters: use OR logic (tickets that are either expiring soon OR expired)
+                from django.db.models import Q
+                tickets = tickets.filter(
+                    Q(
+                        expiration_date__lte=timezone.now() + timezone.timedelta(hours=48),
+                        expiration_date__gt=timezone.now(),
+                        status__in=['open', 'in_progress']
+                    ) | Q(
+                        expiration_date__lt=timezone.now(),
+                        status__in=['open', 'in_progress']
+                    )
+                )
+            elif expiring_soon:
+                # Only expiring soon filter
+                tickets = tickets.filter(
+                    expiration_date__lte=timezone.now() + timezone.timedelta(hours=48),
+                    expiration_date__gt=timezone.now(),
+                    status__in=['open', 'in_progress']
+                )
+            elif expired:
+                # Only expired filter
                 tickets = tickets.filter(
                     expiration_date__lt=timezone.now(),
                     status__in=['open', 'in_progress']
@@ -495,7 +518,8 @@ class UserLogsApi(APIView):
     def get(self, request):
         """Get user logs based on role."""
         try:
-            limit = int(request.query_params.get('limit', 50))
+            query_params = getattr(request, 'query_params', request.GET)
+            limit = int(query_params.get('limit', 50))
             logs = LogSelector.get_user_logs_for_user(request.user, limit=limit)
             
             serializer = UserLogOutputSerializer(logs, many=True)
@@ -526,7 +550,8 @@ class TicketLogsApi(APIView):
     def get(self, request, ticket_id=None):
         """Get ticket logs based on role and ticket access."""
         try:
-            limit = int(request.query_params.get('limit', 50))
+            query_params = getattr(request, 'query_params', request.GET)
+            limit = int(query_params.get('limit', 50))
             logs = LogSelector.get_ticket_logs_for_user(
                 request.user, 
                 ticket_id=ticket_id, 

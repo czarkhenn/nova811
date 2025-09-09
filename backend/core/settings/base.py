@@ -42,6 +42,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    'core',
     'users',
     'tickets',
 ]
@@ -150,7 +151,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': False,
+    'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'VERIFYING_KEY': None,

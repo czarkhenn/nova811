@@ -136,11 +136,9 @@ class TicketService:
         """
         Create a new ticket with full audit logging.
         """
-        # Check permissions
         if not TicketPermissionService.can_create_ticket(created_by):
             raise PermissionDenied("You don't have permission to create tickets")
         
-        # Validate assigned contractor
         try:
             assigned_contractor = User.objects.get(
                 id=assigned_contractor_id, 
@@ -149,11 +147,9 @@ class TicketService:
         except User.DoesNotExist:
             raise ValidationError("Invalid contractor assignment")
         
-        # Validate expiration date
         if expiration_date <= timezone.now():
             raise ValidationError("Expiration date must be in the future")
         
-        # Create ticket
         ticket = Ticket.objects.create(
             organization=organization,
             location=location,
@@ -164,7 +160,6 @@ class TicketService:
             updated_by=created_by
         )
         
-        # Log actions
         LoggingService.log_user_action(
             user=created_by,
             action=UserLog.Action.TICKET_CREATED,
@@ -204,11 +199,9 @@ class TicketService:
         except Ticket.DoesNotExist:
             raise ValidationError("Ticket not found")
         
-        # Check permissions
         if not TicketPermissionService.can_update_ticket(updated_by, ticket):
             raise PermissionDenied("You don't have permission to update this ticket")
         
-        # Store previous values for audit trail
         previous_values = {
             "organization": ticket.organization,
             "status": ticket.status,
@@ -217,10 +210,8 @@ class TicketService:
             "expiration_date": ticket.expiration_date.isoformat()
         }
         
-        # Track what changed
         changes = {}
         
-        # Update allowed fields
         if 'organization' in update_data:
             if ticket.organization != update_data['organization']:
                 changes['organization'] = {
@@ -262,11 +253,9 @@ class TicketService:
                 }
             ticket.expiration_date = new_expiration
         
-        # Update tracking fields
         ticket.updated_by = updated_by
         ticket.save()
         
-        # Log actions if there were changes
         if changes:
             LoggingService.log_user_action(
                 user=updated_by,
@@ -302,22 +291,18 @@ class TicketService:
         except Ticket.DoesNotExist:
             raise ValidationError("Ticket not found")
         
-        # Check permissions
         if not TicketPermissionService.can_update_ticket(closed_by, ticket):
             raise PermissionDenied("You don't have permission to close this ticket")
         
         if ticket.status == Ticket.Status.CLOSED:
             raise ValidationError("Ticket is already closed")
         
-        # Store previous status
         previous_status = ticket.status
         
-        # Close ticket
         ticket.status = Ticket.Status.CLOSED
         ticket.updated_by = closed_by
         ticket.save()
         
-        # Log actions
         LoggingService.log_user_action(
             user=closed_by,
             action=UserLog.Action.TICKET_CLOSED,
@@ -353,17 +338,13 @@ class TicketService:
         except Ticket.DoesNotExist:
             raise ValidationError("Ticket not found")
         
-        # Check permissions
         if not TicketPermissionService.can_renew_ticket(renewed_by, ticket):
             raise PermissionDenied("You don't have permission to renew this ticket")
         
-        # Store previous expiration date
         previous_expiration = ticket.expiration_date
         
-        # Renew ticket
         ticket.renew(renewed_by, days)
         
-        # Log actions
         LoggingService.log_user_action(
             user=renewed_by,
             action=UserLog.Action.TICKET_RENEWED,
@@ -403,11 +384,9 @@ class TicketService:
         except Ticket.DoesNotExist:
             raise ValidationError("Ticket not found")
         
-        # Check permissions
         if not TicketPermissionService.can_assign_ticket(assigned_by):
             raise PermissionDenied("You don't have permission to assign tickets")
         
-        # Validate new assignee
         try:
             new_assignee = User.objects.get(
                 id=assigned_to_id,
@@ -416,18 +395,15 @@ class TicketService:
         except User.DoesNotExist:
             raise ValidationError("Invalid contractor for assignment")
         
-        # Store previous assignee
         previous_assignee = ticket.assigned_contractor
         
         if previous_assignee == new_assignee:
             raise ValidationError("Ticket is already assigned to this contractor")
         
-        # Assign ticket
         ticket.assigned_contractor = new_assignee
         ticket.updated_by = assigned_by
         ticket.save()
         
-        # Log actions
         LoggingService.log_user_action(
             user=assigned_by,
             action=UserLog.Action.TICKET_ASSIGNED,
@@ -499,7 +475,6 @@ class ExpirationService:
             )
             
             logger.warning(alert_message)
-            print(f"[ALERT] {alert_message}")
         
         return len(expiring_tickets)
     
@@ -513,17 +488,14 @@ class ExpirationService:
         updated_count = 0
         
         for ticket in expired_tickets:
-            # Store previous status
             previous_status = ticket.status
             
-            # Mark as closed
             ticket.status = Ticket.Status.CLOSED
             ticket.save()
             
-            # Log the automatic closure
             LoggingService.log_ticket_action(
                 ticket=ticket,
-                action_by=None,  # System action
+                action_by=None,
                 action=TicketLog.Action.CLOSED,
                 details={"reason": "Automatically closed due to expiration"},
                 previous_values={"status": previous_status}

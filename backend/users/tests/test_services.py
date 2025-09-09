@@ -48,22 +48,19 @@ class TestPermissionService:
         
         assert PermissionService.can_view_user_stats(mock_user) is False
 
-    def test_can_view_user_stats_manager_role(self):
-        """Test that manager role can view user stats (if it exists)."""
-        # Create a user with manager role (if supported)
-        manager_user = User.objects.create_user(
-            email='manager@example.com',
+    def test_can_view_user_stats_invalid_role(self):
+        """Test that invalid role cannot view user stats."""
+        # Create a user and manually set invalid role
+        invalid_user = User.objects.create_user(
+            email='invalid@example.com',
             password='testpass123',
-            role='manager'  # This might not exist in current model
+            role=User.Role.CONTRACTOR
         )
-        manager_user.role = 'manager'
-        manager_user.save()
+        invalid_user.role = 'invalid_role'
+        invalid_user.save()
         
-        # This test might fail if manager role doesn't exist
-        # but it tests the service logic
-        result = PermissionService.can_view_user_stats(manager_user)
-        # Since manager role might not be in User.Role choices, this could be False
-        # The test validates the service handles unknown roles gracefully
+        result = PermissionService.can_view_user_stats(invalid_user)
+        assert result is False
 
 
 @pytest.mark.django_db

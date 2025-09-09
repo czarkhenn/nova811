@@ -17,18 +17,13 @@ class TicketSelector:
     def get_tickets_for_user(user, status=None, search=None):
         """
         Get tickets based on user role with optional filtering.
-        Admins see all tickets, contractors see only their assigned tickets.
+        Admins see all tickets, contractors see tickets they created or are assigned to.
         """
         # Base queryset with optimized joins
         queryset = Ticket.objects.select_related(
             'assigned_contractor',
             'created_by',
             'updated_by'
-        ).prefetch_related(
-            Prefetch(
-                'ticket_logs',
-                queryset=TicketLog.objects.select_related('action_by').order_by('-timestamp')[:5]
-            )
         )
         
         # Apply role-based filtering
@@ -36,8 +31,11 @@ class TicketSelector:
             # Admins can see all tickets
             pass
         elif user.is_contractor:
-            # Contractors can only see their assigned tickets
-            queryset = queryset.filter(assigned_contractor=user)
+            # Contractors can see tickets they created or are assigned to
+            queryset = queryset.filter(
+                Q(created_by=user) |
+                Q(assigned_contractor=user)
+            )
         else:
             # No access for other roles
             return queryset.none()
@@ -77,7 +75,7 @@ class TicketSelector:
             # Check access permissions
             if user.is_admin:
                 return ticket
-            elif user.is_contractor and ticket.assigned_contractor == user:
+            elif user.is_contractor and (ticket.assigned_contractor == user or ticket.created_by == user):
                 return ticket
             else:
                 return None
@@ -94,7 +92,10 @@ class TicketSelector:
         if user.is_admin:
             base_queryset = Ticket.objects.all()
         elif user.is_contractor:
-            base_queryset = Ticket.objects.filter(assigned_contractor=user)
+            base_queryset = Ticket.objects.filter(
+                Q(created_by=user) |
+                Q(assigned_contractor=user)
+            )
         else:
             return {}
         
@@ -128,7 +129,10 @@ class TicketSelector:
         if user.is_admin:
             queryset = Ticket.objects.all()
         elif user.is_contractor:
-            queryset = Ticket.objects.filter(assigned_contractor=user)
+            queryset = Ticket.objects.filter(
+                Q(created_by=user) |
+                Q(assigned_contractor=user)
+            )
         else:
             return Ticket.objects.none()
         
@@ -147,7 +151,10 @@ class TicketSelector:
         if user.is_admin:
             queryset = Ticket.objects.all()
         elif user.is_contractor:
-            queryset = Ticket.objects.filter(assigned_contractor=user)
+            queryset = Ticket.objects.filter(
+                Q(created_by=user) |
+                Q(assigned_contractor=user)
+            )
         else:
             return Ticket.objects.none()
         
@@ -177,7 +184,7 @@ class LogSelector:
     def get_user_logs_for_user(user, limit=50):
         """
         Get user logs based on role.
-        Admins can see all logs, contractors see only their own.
+        Admins can see all logs, contractors see logs related to tickets they created or are assigned to.
         """
         if user.is_admin:
             # Admins can see all user logs
@@ -186,10 +193,13 @@ class LogSelector:
                 'related_ticket'
             ).order_by('-timestamp')[:limit]
         elif user.is_contractor:
-            # Contractors can only see their own logs
+            # Contractors can see logs related to tickets they created or are assigned to
             queryset = UserLog.objects.filter(
-                user=user
+                Q(related_ticket__created_by=user) |
+                Q(related_ticket__assigned_contractor=user) |
+                Q(user=user)  # Also include their own logs
             ).select_related(
+                'user',
                 'related_ticket'
             ).order_by('-timestamp')[:limit]
         else:
@@ -217,8 +227,11 @@ class LogSelector:
             # Admins can see all ticket logs
             pass
         elif user.is_contractor:
-            # Contractors can only see logs for their assigned tickets
-            queryset = queryset.filter(ticket__assigned_contractor=user)
+            # Contractors can see logs for tickets they created or are assigned to
+            queryset = queryset.filter(
+                Q(ticket__created_by=user) |
+                Q(ticket__assigned_contractor=user)
+            )
         else:
             return queryset.none()
         
